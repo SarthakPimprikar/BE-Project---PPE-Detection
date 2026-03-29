@@ -8,6 +8,7 @@ flask-cors
 flask-socketio
 eventlet
 python-socketio
+pymongo>=4.0.0
 
 # Optional dependencies for advanced YOLO models
 ultralytics>=8.0.0
