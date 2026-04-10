@@ -1,3 +1,6 @@
+import eventlet
+eventlet.monkey_patch()
+
 import cv2
 import time
 import base64
@@ -9,6 +12,7 @@ from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 from pymongo import MongoClient, ASCENDING, DESCENDING
+from bson.objectid import ObjectId
 
 from workplace_safety_monitor import Monitor, build_argparser, logger
 
@@ -24,6 +28,7 @@ try:
     db_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
     db = db_client["safety_db"]
     logs_collection = db["violation_logs"]
+    inventory_collection = db["equipment_inventory"]
     
     # Create required indexes for fast queries
     logs_collection.create_index([("timestamp", DESCENDING)])
@@ -32,6 +37,7 @@ try:
 except Exception as e:
     print(f"Warning: Could not connect to MongoDB. Is it running? ({e})")
     logs_collection = None
+    inventory_collection = None
 
 # Global stats
 stats = {
@@ -107,6 +113,8 @@ def camera_worker():
     # Initialize the camera using args source
     cap = cv2.VideoCapture(int(mon.args.source)) if str(mon.args.source).isdigit() else cv2.VideoCapture(mon.args.source)
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1) # Prevent hardware frame buffer lag
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
     
     while True:
         try:
@@ -117,9 +125,12 @@ def camera_worker():
                 cap.release()
                 cap = cv2.VideoCapture(int(mon.args.source)) if str(mon.args.source).isdigit() else cv2.VideoCapture(mon.args.source)
                 cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
                 continue
                 
             # Process frame using our optimized Monitor
+            frame = cv2.resize(frame, (640, 480))
             out_frame, frame_stats = mon.process_frame(frame)
             
             # Update global stats for the API
@@ -130,6 +141,7 @@ def camera_worker():
             total_det = max(1, stats["total_detections"])
             comp_rate = 100.0 - (((stats["helmet_violations"] + stats["vest_violations"]) / float(total_det)) * 100.0)
             stats["compliance_rate"] = int(max(0, comp_rate))
+            stats["person_scores"] = frame_stats.get("person_scores", [])
 
             # Log it dynamically! Pass frame for thumbnail extraction
             log_to_mongodb(out_frame, frame_stats)
@@ -257,6 +269,52 @@ def login():
     if data and data.get('username') == 'admin' and data.get('password') == 'admin':
         return jsonify({"success": True, "token": "admin-token-12345"})
     return jsonify({"success": False, "message": "Invalid credentials"}), 401
+
+@app.route('/api/inventory', methods=['GET', 'POST'])
+def handle_inventory():
+    if inventory_collection is None:
+        return jsonify({"success": False, "message": "MongoDB not connected."}), 500
+    if request.method == 'GET':
+        items = list(inventory_collection.find())
+        for item in items:
+            item['_id'] = str(item['_id'])
+            if 'last_updated' in item:
+                item['last_updated'] = str(item['last_updated'])
+        return jsonify({"success": True, "items": items})
+    elif request.method == 'POST':
+        data = request.json
+        new_item = {
+            "name": data.get("name", "Unknown"),
+            "type": data.get("type", "Helmet"),
+            "status": data.get("status", "Available"),
+            "assigned_to": data.get("assigned_to", ""),
+            "last_updated": datetime.datetime.now(datetime.timezone.utc)
+        }
+        res = inventory_collection.insert_one(new_item)
+        new_item['_id'] = str(res.inserted_id)
+        return jsonify({"success": True, "item": new_item})
+
+@app.route('/api/inventory/<item_id>', methods=['PUT', 'DELETE'])
+def manage_inventory_item(item_id):
+    if inventory_collection is None:
+        return jsonify({"success": False, "message": "MongoDB not connected."}), 500
+    try:
+        if request.method == 'PUT':
+            data = request.json
+            update_fields = {k: v for k, v in {
+                "name": data.get("name"),
+                "type": data.get("type"),
+                "status": data.get("status"),
+                "assigned_to": data.get("assigned_to"),
+                "last_updated": datetime.datetime.now(datetime.timezone.utc)
+            }.items() if v is not None}
+            inventory_collection.update_one({"_id": ObjectId(item_id)}, {"$set": update_fields})
+            return jsonify({"success": True})
+        elif request.method == 'DELETE':
+            inventory_collection.delete_one({"_id": ObjectId(item_id)})
+            return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 400
 
 if __name__ == '__main__':
     print("Starting AI Real-Time Server on port 5000...")

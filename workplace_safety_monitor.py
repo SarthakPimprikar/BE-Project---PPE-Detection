@@ -45,6 +45,7 @@ import numpy as np
 # -------------------------------
 try:
     from ultralytics import YOLO
+    import torch
     _ULTRA_AVAILABLE = True
 except Exception:
     _ULTRA_AVAILABLE = False
@@ -187,8 +188,10 @@ class PersonDetector:
         if self.use_ultra:
             try:
                 self.model = YOLO(weights)
+                if torch.cuda.is_available():
+                    self.model.to('cuda')
                 dummy = np.zeros((640, 640, 3), dtype=np.uint8)
-                _ = self.model(dummy, conf=self.conf, verbose=False)
+                _ = self.model(dummy, conf=self.conf, verbose=False, device='cuda' if torch.cuda.is_available() else 'cpu')
                 logger.info("Person detector: Ultralytics")
             except Exception as e:
                 logger.warning(f"Ultralytics person model failed: {e}. Falling back to HOG.")
@@ -202,7 +205,7 @@ class PersonDetector:
         H, W = frame.shape[:2]
         out: List[Box] = []
         if self.use_ultra:
-            res = self.model(frame, conf=self.conf, verbose=False)
+            res = self.model(frame, conf=self.conf, verbose=False, device='cuda' if torch.cuda.is_available() else 'cpu')
             for r in res:
                 names = r.names if hasattr(r, 'names') else {}
                 for b in r.boxes:
@@ -234,16 +237,18 @@ class PPEUltralytics:
         if not _ULTRA_AVAILABLE:
             raise RuntimeError("Ultralytics not installed")
         self.model = YOLO(weights)
+        if torch.cuda.is_available():
+            self.model.to('cuda')
         self.conf_th = conf_th
         self.nms_iou = nms_iou
         self.class_map = class_map
-        _ = self.model(np.zeros((640, 640, 3), dtype=np.uint8), conf=self.conf_th, iou=self.nms_iou, verbose=False)
+        _ = self.model(np.zeros((640, 640, 3), dtype=np.uint8), conf=self.conf_th, iou=self.nms_iou, verbose=False, device='cuda' if torch.cuda.is_available() else 'cpu')
         logger.info("PPE Ultralytics model loaded")
 
     def infer(self, frame: np.ndarray) -> List[Box]:
         H, W = frame.shape[:2]
         out: List[Box] = []
-        res = self.model(frame, conf=self.conf_th, iou=self.nms_iou, verbose=False)
+        res = self.model(frame, conf=self.conf_th, iou=self.nms_iou, verbose=False, device='cuda' if torch.cuda.is_available() else 'cpu')
         for r in res:
             names = r.names if hasattr(r, 'names') else {}
             for b in r.boxes:
@@ -261,6 +266,11 @@ class PPEOnnx:
     """Minimal YOLOv7 ONNX inference using OpenCV DNN. Adjust parser if your export differs."""
     def __init__(self, onnx_path: str, class_names: List[str], conf_th: float, nms_iou: float, input_size: int = 640):
         self.net = cv2.dnn.readNetFromONNX(onnx_path)
+        try:
+            self.net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
+            self.net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
+        except Exception as e:
+            logger.warning(f"Could not set CUDA backend for OpenCV DNN: {e}")
         self.class_names = [n.lower() for n in class_names]
         self.conf_th = conf_th
         self.nms_iou = nms_iou
@@ -592,13 +602,32 @@ class Monitor:
         current_stats = {
             "people_count": len(persons),
             "helmet_violations": 0,
-            "vest_violations": 0
+            "vest_violations": 0,
+            "person_scores": []
         }
         
         for i, p in enumerate(persons):
             sh, sv = smoothed[i]
             if not sh: current_stats["helmet_violations"] += 1
             if not sv: current_stats["vest_violations"] += 1
+            
+            # Smart Safety Score
+            if sh and sv:
+                score = 100
+            elif sh and not sv:
+                score = 70
+            elif not sh and sv:
+                score = 30
+            else:
+                score = 0
+            
+            current_stats["person_scores"].append({
+                "id": int(track_ids[i]),
+                "has_helmet": bool(sh),
+                "has_vest": bool(sv),
+                "score": score
+            })
+            
             draw_person_ppe(vis, p, sh, sv, matched_h[i], matched_v[i], track_ids[i])
             
         return vis, current_stats
