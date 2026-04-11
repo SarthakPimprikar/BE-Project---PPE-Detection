@@ -623,6 +623,7 @@ class Monitor:
             
             current_stats["person_scores"].append({
                 "id": int(track_ids[i]),
+                "box": list(p.xyxy()), 
                 "has_helmet": bool(sh),
                 "has_vest": bool(sv),
                 "score": score
