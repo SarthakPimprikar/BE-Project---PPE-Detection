@@ -64,59 +64,74 @@ class IdentityMatcher:
     def identify_person(self, person_crop):
         """
         Matches a person crop against known faces.
-        Returns worker data if matched, else None.
+        Returns worker data dict (with 'confidence') if matched, else None.
+        Uses a strict threshold + margin check to avoid misidentifying unknown people.
         """
         if not self.known_faces:
             return None
         
         try:
-            # We use verify which is more robust as it handles normalization
-            # and supports multiple distance metrics
-            best_match = None
-            min_dist = 1.0 # Max cosine distance is 1.0 (very different)
+            # Extract embedding ONCE for the live person crop
+            res = DeepFace.represent(
+                img_path=person_crop,
+                model_name=self.model_name,
+                enforce_detection=False,
+                detector_backend=self.detector_backend
+            )
             
+            if not res or len(res) == 0:
+                return None
+            
+            # Check face confidence from the detector — skip low-quality detections
+            face_confidence = res[0].get("face_confidence", 1.0)
+            if face_confidence < 0.70:
+                return None
+            
+            v1 = np.array(res[0]["embedding"])
+            norm_v1 = np.linalg.norm(v1)
+            if norm_v1 < 1e-6:
+                return None
+            
+            # Compare against all known workers
+            distances = []
             for w_id, data in self.known_faces.items():
-                # We can't use verify directly on embeddings easily without the images
-                # but DeepFace handles verification well.
-                # However, for speed with multi-worker, we already have embeddings.
-                # Let's use Cosine similarity on the embeddings
-                
-                # Get live embedding
-                res = DeepFace.represent(
-                    img_path=person_crop,
-                    model_name=self.model_name,
-                    enforce_detection=False,
-                    detector_backend=self.detector_backend
-                )
-                
-                if not res or len(res) == 0:
-                    return None
-                
-                v1 = np.array(res[0]["embedding"])
                 v2 = np.array(data["embedding"])
+                norm_v2 = np.linalg.norm(v2)
                 
                 # Cosine distance = 1 - Cosine similarity
-                dot_product = np.dot(v1, v2)
-                norm_v1 = np.linalg.norm(v1)
-                norm_v2 = np.linalg.norm(v2)
-                cosine_dist = 1 - (dot_product / (norm_v1 * norm_v2))
-                
-                # print(f"DEBUG: Cosine distance to {data['name']}: {cosine_dist:.4f}")
-                
-                if cosine_dist < min_dist:
-                    min_dist = cosine_dist
-                    best_match = data
+                cosine_dist = 1 - (np.dot(v1, v2) / (norm_v1 * norm_v2))
+                distances.append((cosine_dist, w_id, data))
             
-            # Typical Cosine threshold for Facenet is 0.40
-            # We'll be very generous for the demo: 0.55
-            if min_dist < 0.55:
-                print(f"DEBUG: MATCH FOUND! {best_match['name']} (dist: {min_dist:.4f})")
-                return best_match
-            else:
+            # Sort by distance (best match first)
+            distances.sort(key=lambda x: x[0])
+            
+            best_dist, best_wid, best_data = distances[0]
+            
+            # --- STRICT THRESHOLD ---
+            # Facenet cosine distance: < 0.35 is a confident match
+            MATCH_THRESHOLD = 0.35
+            
+            if best_dist >= MATCH_THRESHOLD:
                 if int(time.time()) % 5 == 0:
-                    print(f"DEBUG: Best match was {best_match['name']} but dist {min_dist:.4f} > 0.55")
+                    print(f"DEBUG: Rejected — best was {best_data['name']} but dist {best_dist:.4f} >= {MATCH_THRESHOLD}")
+                return None
             
-            return None
+            # --- MARGIN CHECK ---
+            # If there are multiple known faces, the best match must be meaningfully
+            # better than the second-best to avoid ambiguous matches
+            if len(distances) >= 2:
+                second_dist = distances[1][0]
+                margin = second_dist - best_dist
+                MIN_MARGIN = 0.05
+                if margin < MIN_MARGIN:
+                    if int(time.time()) % 5 == 0:
+                        print(f"DEBUG: Rejected — ambiguous match: {best_data['name']}={best_dist:.4f} vs {distances[1][2]['name']}={second_dist:.4f} (margin {margin:.4f})")
+                    return None
+            
+            print(f"DEBUG: MATCH FOUND! {best_data['name']} (dist: {best_dist:.4f})")
+            result = dict(best_data)
+            result['confidence'] = round(1.0 - best_dist, 3)
+            return result
             
         except Exception as e:
             # print(f"DEBUG: Identification error: {e}")

@@ -62,6 +62,29 @@ function Login({ onLogin }) {
   const [isLoading, setIsLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
 
+  // 2FA OTP State
+  const [otpStep, setOtpStep] = useState(false);
+  const [sessionKey, setSessionKey] = useState('');
+  const [maskedEmail, setMaskedEmail] = useState('');
+  const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
+  const [countdown, setCountdown] = useState(300);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const otpRefs = [useRef(), useRef(), useRef(), useRef(), useRef(), useRef()];
+
+  // Countdown timer for OTP expiry
+  useEffect(() => {
+    if (!otpStep || countdown <= 0) return;
+    const timer = setInterval(() => setCountdown(prev => prev - 1), 1000);
+    return () => clearInterval(timer);
+  }, [otpStep, countdown]);
+
+  // Resend cooldown timer
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => setResendCooldown(prev => prev - 1), 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -73,20 +96,220 @@ function Login({ onLogin }) {
         body: JSON.stringify({ username, password, role })
       });
       const data = await resp.json();
-      if (data.success) {
+      if (data.success && data.requires_otp) {
+        setSessionKey(data.session_key);
+        setMaskedEmail(data.masked_email);
+        setOtpStep(true);
+        setCountdown(300);
+        setOtpDigits(['', '', '', '', '', '']);
+        setTimeout(() => otpRefs[0].current?.focus(), 100);
+      } else if (data.success && data.role) {
         onLogin(data.role);
       } else {
         setError(data.message || 'Invalid credentials');
       }
     } catch (err) {
-      if (username === 'admin' && password === 'admin' && role === 'admin') onLogin('admin');
-      else if (username === (role === 'supervisor' ? 'supervisor' : 'admin') && password === (role === 'supervisor' ? 'supervisor' : 'admin')) onLogin(role);
-      else setError("System Offline. Check credentials and role.");
+      setError("System Offline. Check credentials and try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleOtpChange = (index, value) => {
+    if (!/^\d*$/.test(value)) return;
+    const newDigits = [...otpDigits];
+    newDigits[index] = value.slice(-1);
+    setOtpDigits(newDigits);
+    if (value && index < 5) otpRefs[index + 1].current?.focus();
+  };
+
+  const handleOtpKeyDown = (index, e) => {
+    if (e.key === 'Backspace' && !otpDigits[index] && index > 0) {
+      otpRefs[index - 1].current?.focus();
+    }
+  };
+
+  const handleOtpPaste = (e) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (pasted.length > 0) {
+      const newDigits = [...otpDigits];
+      for (let i = 0; i < 6; i++) newDigits[i] = pasted[i] || '';
+      setOtpDigits(newDigits);
+      const focusIdx = Math.min(pasted.length, 5);
+      otpRefs[focusIdx].current?.focus();
+    }
+  };
+
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    const otp = otpDigits.join('');
+    if (otp.length !== 6) { setError('Please enter the complete 6-digit code'); return; }
+    setError('');
+    setIsLoading(true);
+    try {
+      const resp = await fetch(`${MOCK_API}/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_key: sessionKey, otp })
+      });
+      const data = await resp.json();
+      if (data.success) {
+        onLogin(data.role);
+      } else {
+        setError(data.message || 'Invalid OTP');
+        setOtpDigits(['', '', '', '', '', '']);
+        otpRefs[0].current?.focus();
+      }
+    } catch (err) {
+      setError("Verification failed. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0) return;
+    setError('');
+    try {
+      const resp = await fetch(`${MOCK_API}/resend-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_key: sessionKey })
+      });
+      const data = await resp.json();
+      if (data.success) {
+        setCountdown(300);
+        setResendCooldown(30);
+        setOtpDigits(['', '', '', '', '', '']);
+        otpRefs[0].current?.focus();
+      } else {
+        setError(data.message);
+        if (data.message?.includes('expired')) { setOtpStep(false); }
+      }
+    } catch (err) {
+      setError("Failed to resend code.");
+    }
+  };
+
+  const formatTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+
+  const inputStyle = {
+    width: '100%', padding: '14px 16px 14px 48px', background: '#f8fafc',
+    border: '1px solid #e2e8f0', borderRadius: '12px', fontSize: '15px', color: '#1e293b',
+    outline: 'none', transition: 'border-color 0.2s'
+  };
+
+  const btnStyle = {
+    width: '100%', padding: '16px', background: '#0061f2', color: '#fff',
+    border: 'none', borderRadius: '12px', fontSize: '16px', fontWeight: 700,
+    cursor: isLoading ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
+    boxShadow: '0 4px 12px rgba(0, 97, 242, 0.2)', marginTop: '8px'
+  };
+
+  // ---- OTP Verification Screen ----
+  if (otpStep) {
+    return (
+      <div className="login-container animate-fade-in" style={{ background: '#f8fafc', color: '#1e293b' }}>
+        <div className="login-box-v2" style={{
+          width: '100%', maxWidth: '440px', padding: '48px', background: '#fff',
+          borderRadius: '24px', boxShadow: '0 20px 50px rgba(0,0,0,0.05)', margin: '20px'
+        }}>
+          <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+            <div style={{
+              width: '64px', height: '64px', borderRadius: '50%', margin: '0 auto 16px',
+              background: 'linear-gradient(135deg, #dbeafe, #eff6ff)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(37, 99, 235, 0.15)'
+            }}>
+              <Mail size={28} color="#2563eb" />
+            </div>
+            <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#00204a', marginBottom: '8px' }}>Verify Your Identity</h1>
+            <p style={{ color: '#64748b', fontSize: '14px', lineHeight: 1.6 }}>
+              We've sent a 6-digit verification code to<br />
+              <strong style={{ color: '#1e293b' }}>{maskedEmail}</strong>
+            </p>
+          </div>
+
+          {error && <div style={{ color: '#ef4444', background: '#fef2f2', padding: '12px', borderRadius: '8px', fontSize: '14px', marginBottom: '20px', border: '1px solid #fee2e2', textAlign: 'center' }}>{error}</div>}
+
+          <form onSubmit={handleVerifyOtp}>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginBottom: '24px' }}>
+              {otpDigits.map((digit, i) => (
+                <input
+                  key={i}
+                  ref={otpRefs[i]}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  onChange={(e) => handleOtpChange(i, e.target.value)}
+                  onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                  onPaste={i === 0 ? handleOtpPaste : undefined}
+                  style={{
+                    width: '48px', height: '56px', textAlign: 'center', fontSize: '22px', fontWeight: 700,
+                    border: digit ? '2px solid #2563eb' : '2px solid #e2e8f0', borderRadius: '12px',
+                    background: digit ? '#eff6ff' : '#f8fafc', color: '#1e293b', outline: 'none',
+                    transition: 'all 0.2s', caretColor: '#2563eb'
+                  }}
+                  onFocus={(e) => { e.target.style.borderColor = '#2563eb'; e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.1)'; }}
+                  onBlur={(e) => { e.target.style.borderColor = digit ? '#2563eb' : '#e2e8f0'; e.target.style.boxShadow = 'none'; }}
+                />
+              ))}
+            </div>
+
+            {/* Timer */}
+            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+              {countdown > 0 ? (
+                <span style={{ fontSize: '13px', color: '#64748b' }}>
+                  Code expires in <strong style={{ color: countdown <= 60 ? '#ef4444' : '#2563eb' }}>{formatTime(countdown)}</strong>
+                </span>
+              ) : (
+                <span style={{ fontSize: '13px', color: '#ef4444', fontWeight: 600 }}>Code has expired. Please resend.</span>
+              )}
+            </div>
+
+            <button type="submit" disabled={isLoading || countdown <= 0} style={{
+              ...btnStyle, opacity: (isLoading || countdown <= 0) ? 0.6 : 1,
+              cursor: (isLoading || countdown <= 0) ? 'not-allowed' : 'pointer'
+            }}
+              onMouseOver={(e) => { if (!isLoading && countdown > 0) e.target.style.background = '#0052cc'; }}
+              onMouseOut={(e) => { if (!isLoading && countdown > 0) e.target.style.background = '#0061f2'; }}
+            >
+              {isLoading ? 'Verifying...' : 'Verify & Sign In'}
+            </button>
+          </form>
+
+          <div style={{ textAlign: 'center', marginTop: '20px' }}>
+            <button
+              onClick={handleResendOtp}
+              disabled={resendCooldown > 0}
+              style={{
+                background: 'none', border: 'none', color: resendCooldown > 0 ? '#94a3b8' : '#2563eb',
+                fontSize: '14px', fontWeight: 600, cursor: resendCooldown > 0 ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : 'Resend Code'}
+            </button>
+          </div>
+
+          <div style={{ textAlign: 'center', marginTop: '16px' }}>
+            <button
+              onClick={() => { setOtpStep(false); setError(''); setOtpDigits(['','','','','','']); }}
+              style={{
+                background: 'none', border: 'none', color: '#64748b',
+                fontSize: '13px', cursor: 'pointer', textDecoration: 'underline'
+              }}
+            >
+              ← Back to Login
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ---- Credentials Screen (Step 1) ----
   return (
     <div className="login-container animate-fade-in" style={{ background: '#f8fafc', color: '#1e293b' }}>
       <div className="login-box-v2" style={{ 
@@ -147,11 +370,7 @@ function Login({ onLogin }) {
                 value={username} 
                 onChange={e => setUsername(e.target.value)} 
                 required 
-                style={{ 
-                  width: '100%', padding: '14px 16px 14px 48px', background: '#f8fafc', 
-                  border: '1px solid #e2e8f0', borderRadius: '12px', fontSize: '15px', color: '#1e293b',
-                  outline: 'none', transition: 'border-color 0.2s'
-                }}
+                style={inputStyle}
                 onFocus={(e) => e.target.style.borderColor = '#2563eb'}
                 onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
               />
@@ -168,11 +387,7 @@ function Login({ onLogin }) {
                 value={password} 
                 onChange={e => setPassword(e.target.value)} 
                 required 
-                style={{ 
-                  width: '100%', padding: '14px 48px 14px 48px', background: '#f8fafc', 
-                  border: '1px solid #e2e8f0', borderRadius: '12px', fontSize: '15px', color: '#1e293b',
-                  outline: 'none', transition: 'border-color 0.2s'
-                }}
+                style={{ ...inputStyle, padding: '14px 48px 14px 48px' }}
                 onFocus={(e) => e.target.style.borderColor = '#2563eb'}
                 onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
               />
@@ -188,19 +403,17 @@ function Login({ onLogin }) {
           <button 
             type="submit" 
             disabled={isLoading}
-            style={{ 
-              width: '100%', padding: '16px', background: '#0061f2', color: '#fff', 
-              border: 'none', borderRadius: '12px', fontSize: '16px', fontWeight: 700, 
-              cursor: isLoading ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
-              boxShadow: '0 4px 12px rgba(0, 97, 242, 0.2)',
-              marginTop: '8px'
-            }}
+            style={btnStyle}
             onMouseOver={(e) => { if(!isLoading) e.target.style.background = '#0052cc' }}
             onMouseOut={(e) => { if(!isLoading) e.target.style.background = '#0061f2' }}
           >
-            {isLoading ? 'Processing...' : 'Log In'}
+            {isLoading ? 'Authenticating...' : 'Continue'}
           </button>
         </form>
+
+        <p style={{ textAlign: 'center', marginTop: '20px', fontSize: '12px', color: '#94a3b8' }}>
+          🔐 Protected by Two-Factor Authentication
+        </p>
       </div>
     </div>
   );

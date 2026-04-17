@@ -4,8 +4,12 @@ and the data displayed in the UI matches the database.
 """
 from pymongo import MongoClient
 import datetime
+import os
+from dotenv import load_dotenv
 
-MONGO_URI = "mongodb+srv://pimprikarsarthaksynture_db_user:plF1qr9kbkRXrf8T@ppe-cluster.upimgci.mongodb.net/?retryWrites=true&w=majority&appName=PPE-Cluster"
+load_dotenv()
+
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 
 print("=" * 60)
 print("  SAFETY DASHBOARD - FULL FEATURE AUDIT")

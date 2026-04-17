@@ -1,6 +1,12 @@
 import eventlet
 eventlet.monkey_patch()
 
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
 import cv2
 import time
 import base64
@@ -27,7 +33,7 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 # -------------------------------
 # MongoDB Database Setup
 # -------------------------------
-MONGO_URI = "mongodb+srv://pimprikarsarthaksynture_db_user:plF1qr9kbkRXrf8T@ppe-cluster.upimgci.mongodb.net/?retryWrites=true&w=majority&appName=PPE-Cluster"
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 try:
     db_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
     db = db_client["safety_db"]
@@ -50,16 +56,80 @@ except Exception as e:
 # -------------------------------
 # EMERGENCY NOTIFICATION CONFIG
 # -------------------------------
-# NOTE: To send REAl emails, you must use an "App Password" (not your regular Gmail password)
-# Go to Google Account -> Security -> 2FA -> App Passwords
+# NOTE: Using environment variables for sensitive configuration
 EMAIL_CONFIG = {
-    "sender_email": "rohangadekar07@gmail.com",
-    "sender_password": "iguq bwkr jadx zyyk", # Replace with your App Password
-    "recipient_email": "pimprikarsarthak.synture@gmail.com",
-    "smtp_server": "smtp.gmail.com",
-    "smtp_port": 587,
-    "simulate": False # Toggle to False to send real emails
+    "sender_email": os.getenv("SENDER_EMAIL", "your-email@gmail.com"),
+    "sender_password": os.getenv("SENDER_PASSWORD", ""),
+    "recipient_email": os.getenv("RECIPIENT_EMAIL", "recipient@gmail.com"),
+    "smtp_server": os.getenv("SMTP_SERVER", "smtp.gmail.com"),
+    "smtp_port": int(os.getenv("SMTP_PORT", 587)),
+    "simulate": os.getenv("SIMULATE_EMAIL", "False").lower() == "true"
 }
+
+# -------------------------------
+# TWO-FACTOR AUTHENTICATION (OTP)
+# -------------------------------
+OTP_EXPIRY = int(os.getenv("OTP_EXPIRY_SECONDS", 300))  # 5 minutes default
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "pansaresamruddhi397@gmail.com")
+SUPERVISOR_EMAIL = os.getenv("SUPERVISOR_EMAIL", "moredevika44@gmail.com")
+
+# In-memory OTP store: { session_key: { otp, email, role, expires_at } }
+otp_store = {}
+
+def generate_otp():
+    """Generate a 6-digit OTP code."""
+    return str(random.randint(100000, 999999))
+
+def send_otp_email(recipient_email, otp_code, role):
+    """Send OTP verification email for 2FA login."""
+    if EMAIL_CONFIG["simulate"]:
+        print(f"\n[SIMULATION] OTP Email sent to {recipient_email}")
+        print(f"OTP Code: {otp_code} (Role: {role})\n")
+        return True
+
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_CONFIG["sender_email"]
+        msg['To'] = recipient_email
+        msg['Subject'] = f"🔐 Vanguard AI - Your Login Verification Code"
+
+        body = f"""
+        🔐 Two-Factor Authentication
+        
+        Hello {role.capitalize()},
+        
+        Your one-time verification code for Vanguard AI Safety System is:
+        
+        ━━━━━━━━━━━━━━━━━━━━━━━
+              {otp_code}
+        ━━━━━━━━━━━━━━━━━━━━━━━
+        
+        This code will expire in {OTP_EXPIRY // 60} minutes.
+        
+        If you did not request this code, please ignore this email or contact your system administrator.
+        
+        Stay Safe,
+        Vanguard AI Security System
+        """
+        msg.attach(MIMEText(body, 'plain'))
+
+        server = smtplib.SMTP(EMAIL_CONFIG["smtp_server"], EMAIL_CONFIG["smtp_port"])
+        server.starttls()
+        server.login(EMAIL_CONFIG["sender_email"], EMAIL_CONFIG["sender_password"])
+        server.send_message(msg)
+        server.quit()
+        print(f"SUCCESS: OTP email sent to {recipient_email}")
+        return True
+    except Exception as e:
+        print(f"EMAIL ERROR: Failed to send OTP email: {e}")
+        return False
+
+def cleanup_expired_otps():
+    """Remove expired OTP entries from the store."""
+    now = time.time()
+    expired_keys = [k for k, v in otp_store.items() if v['expires_at'] < now]
+    for k in expired_keys:
+        del otp_store[k]
 
 def send_sos_email(by="Admin"):
     if EMAIL_CONFIG["simulate"]:
@@ -117,7 +187,7 @@ latest_frame_bytes = None
 is_ai_active = False # Manual Toggle for Detection
 daily_person_scores = {}
 worker_cache = {} # Map emp_id -> {name, photo}
-id_map = {} # Map track_id -> emp_id (identity fusion)
+id_map = {} # Map track_id -> {match_data, timestamp} (identity fusion with expiry)
 matcher = IdentityMatcher()
 
 def refresh_worker_cache():
@@ -240,17 +310,32 @@ def camera_worker():
             scores = frame_stats.get("person_scores", [])
             
             # Identity Matching Logic (AI Identity Fusion)
+            current_time = time.time()
+            ID_MATCH_EXPIRY = 30  # Re-check identity every 30 seconds
+            ID_RETRY_INTERVAL = 3  # Don't retry failed matches more than once per 3 seconds
+            
             updated_scores = []
             for p in scores:
                 pid = str(p['id'])
                 
-                # If we have a box and haven't identified this person yet (or periodically retry)
-                if pid not in id_map and 'box' in p:
+                # Check if we need to (re-)identify this person
+                cached = id_map.get(pid)
+                should_identify = False
+                
+                if cached is None:
+                    # Never identified — try now
+                    should_identify = True
+                elif cached.get('name') == 'Unknown' and (current_time - cached.get('timestamp', 0)) > ID_RETRY_INTERVAL:
+                    # Was marked unknown, retry after interval
+                    should_identify = True
+                elif cached.get('name') != 'Unknown' and (current_time - cached.get('timestamp', 0)) > ID_MATCH_EXPIRY:
+                    # Matched identity expired, re-verify
+                    should_identify = True
+                
+                if should_identify and 'box' in p:
                     box = p['box']
                     try:
-                        # Extract crop
                         x1, y1, x2, y2 = map(int, box)
-                        # Ensure box is within frame
                         h, w = frame.shape[:2]
                         x1, y1 = max(0, x1), max(0, y1)
                         x2, y2 = min(w, x2), min(h, y2)
@@ -259,16 +344,29 @@ def camera_worker():
                             crop = frame[y1:y2, x1:x2]
                             match = matcher.identify_person(crop)
                             if match:
-                                id_map[pid] = match
-                                print(f"IDENTIFIED: Person #{pid} -> {match['name']}")
+                                id_map[pid] = {
+                                    'name': match['name'],
+                                    'photo': match.get('photo', ''),
+                                    'confidence': match.get('confidence', 0),
+                                    'timestamp': current_time
+                                }
+                                print(f"IDENTIFIED: Person #{pid} -> {match['name']} (conf: {match.get('confidence', '?')})")
+                            else:
+                                # Explicitly mark as Unknown so we don't spam retries
+                                id_map[pid] = {
+                                    'name': 'Unknown',
+                                    'photo': '',
+                                    'confidence': 0,
+                                    'timestamp': current_time
+                                }
                     except Exception as e:
                         print(f"ID error: {e}")
                 
-                # Attach data if we found a match
-                match = id_map.get(pid)
-                if match:
-                    p['name'] = match.get('name', 'Unknown')
-                    p['photo'] = match.get('photo', '')
+                # Attach data if we found a match (skip if Unknown)
+                cached = id_map.get(pid)
+                if cached and cached.get('name') != 'Unknown':
+                    p['name'] = cached['name']
+                    p['photo'] = cached.get('photo', '')
                 
                 updated_scores.append(p)
             
@@ -453,12 +551,115 @@ def login():
     password = data.get('password')
     role = data.get('role')
     
-    if username == 'admin' and password == 'admin' and role == 'admin':
-        return jsonify({"success": True, "token": "admin-token", "role": "admin"})
-    elif username == 'supervisor' and password == 'supervisor' and role == 'supervisor':
-        return jsonify({"success": True, "token": "supervisor-token", "role": "supervisor"})
-        
-    return jsonify({"success": False, "message": "Invalid credentials or wrong role selected"}), 401
+    admin_usr = os.getenv("ADMIN_USERNAME", "admin")
+    admin_pwd = os.getenv("ADMIN_PASSWORD", "admin")
+    sup_usr = os.getenv("SUPERVISOR_USERNAME", "supervisor")
+    sup_pwd = os.getenv("SUPERVISOR_PASSWORD", "supervisor")
+    
+    # Step 1: Validate credentials
+    authenticated_role = None
+    target_email = None
+    
+    if username == admin_usr and password == admin_pwd and role == 'admin':
+        authenticated_role = 'admin'
+        target_email = ADMIN_EMAIL
+    elif username == sup_usr and password == sup_pwd and role == 'supervisor':
+        authenticated_role = 'supervisor'
+        target_email = SUPERVISOR_EMAIL
+    
+    if not authenticated_role:
+        return jsonify({"success": False, "message": "Invalid credentials or wrong role selected"}), 401
+    
+    # Step 2: Generate OTP and send via email
+    cleanup_expired_otps()
+    otp_code = generate_otp()
+    session_key = f"{authenticated_role}_{int(time.time())}_{random.randint(1000, 9999)}"
+    
+    otp_store[session_key] = {
+        'otp': otp_code,
+        'email': target_email,
+        'role': authenticated_role,
+        'expires_at': time.time() + OTP_EXPIRY,
+        'username': username
+    }
+    
+    # Send OTP email in background thread
+    threading.Thread(target=send_otp_email, args=(target_email, otp_code, authenticated_role)).start()
+    
+    # Mask email for frontend display
+    parts = target_email.split('@')
+    masked = parts[0][:3] + '***@' + parts[1]
+    
+    return jsonify({
+        "success": True,
+        "requires_otp": True,
+        "session_key": session_key,
+        "masked_email": masked,
+        "message": f"Verification code sent to {masked}"
+    })
+
+@app.route('/api/verify-otp', methods=['POST'])
+def verify_otp():
+    """Verify the OTP code and complete login."""
+    data = request.json
+    session_key = data.get('session_key')
+    otp_code = data.get('otp')
+    
+    if not session_key or not otp_code:
+        return jsonify({"success": False, "message": "Missing session key or OTP code"}), 400
+    
+    # Check if session exists
+    session = otp_store.get(session_key)
+    if not session:
+        return jsonify({"success": False, "message": "Session expired. Please login again."}), 401
+    
+    # Check expiry
+    if time.time() > session['expires_at']:
+        del otp_store[session_key]
+        return jsonify({"success": False, "message": "OTP has expired. Please login again."}), 401
+    
+    # Verify OTP
+    if otp_code.strip() != session['otp']:
+        return jsonify({"success": False, "message": "Invalid OTP code. Please try again."}), 401
+    
+    # OTP verified - complete login
+    role = session['role']
+    del otp_store[session_key]  # One-time use
+    
+    return jsonify({
+        "success": True,
+        "token": f"{role}-token",
+        "role": role
+    })
+
+@app.route('/api/resend-otp', methods=['POST'])
+def resend_otp():
+    """Resend a new OTP code for an existing session."""
+    data = request.json
+    session_key = data.get('session_key')
+    
+    if not session_key:
+        return jsonify({"success": False, "message": "Missing session key"}), 400
+    
+    session = otp_store.get(session_key)
+    if not session:
+        return jsonify({"success": False, "message": "Session expired. Please login again."}), 401
+    
+    # Generate new OTP and update session
+    new_otp = generate_otp()
+    session['otp'] = new_otp
+    session['expires_at'] = time.time() + OTP_EXPIRY
+    
+    # Send new OTP email
+    threading.Thread(target=send_otp_email, args=(session['email'], new_otp, session['role'])).start()
+    
+    parts = session['email'].split('@')
+    masked = parts[0][:3] + '***@' + parts[1]
+    
+    return jsonify({
+        "success": True,
+        "message": f"New verification code sent to {masked}"
+    })
 
 @app.route('/api/inventory', methods=['GET', 'POST'])
 def handle_inventory():
@@ -594,5 +795,6 @@ def update_alert(item_id):
         return jsonify({"success": False, "message": str(e)}), 400
 
 if __name__ == '__main__':
-    print("Starting AI Real-Time Server on port 5000...")
-    socketio.run(app, host="0.0.0.0", port=5000, debug=False)
+    port = int(os.getenv("FLASK_PORT", 5000))
+    print(f"Starting AI Real-Time Server on port {port}...")
+    socketio.run(app, host="0.0.0.0", port=port, debug=False)
