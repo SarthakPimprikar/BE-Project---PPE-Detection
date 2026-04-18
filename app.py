@@ -88,30 +88,66 @@ def send_otp_email(recipient_email, otp_code, role):
         return True
 
     try:
-        msg = MIMEMultipart()
+        msg = MIMEMultipart('alternative')
         msg['From'] = EMAIL_CONFIG["sender_email"]
         msg['To'] = recipient_email
-        msg['Subject'] = f"🔐 Vanguard AI - Your Login Verification Code"
+        msg['Subject'] = f"🔐 Vanguard AI - Login Verification Code"
 
-        body = f"""
-        🔐 Two-Factor Authentication
-        
+        # Plain text fallback
+        text = f"""
         Hello {role.capitalize()},
         
-        Your one-time verification code for Vanguard AI Safety System is:
+        Your Vanguard AI verification code is: {otp_code}
         
-        ━━━━━━━━━━━━━━━━━━━━━━━
-              {otp_code}
-        ━━━━━━━━━━━━━━━━━━━━━━━
-        
-        This code will expire in {OTP_EXPIRY // 60} minutes.
-        
-        If you did not request this code, please ignore this email or contact your system administrator.
-        
-        Stay Safe,
-        Vanguard AI Security System
+        This code expires in {OTP_EXPIRY // 60} minutes.
         """
-        msg.attach(MIMEText(body, 'plain'))
+        
+        # Professional HTML version
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <body style="margin:0;padding:0;font-family: Arial, sans-serif;background-color:#f4f7f6;color:#333;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f7f6;padding: 40px 20px;">
+                <tr>
+                    <td align="center">
+                        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 4px 10px rgba(0,0,0,0.05);">
+                            <tr>
+                                <td style="background-color:#2563eb;padding:30px;text-align:center;">
+                                    <h1 style="color:#ffffff;margin:0;font-size:24px;font-weight:700;letter-spacing:1px;">VANGUARD AI</h1>
+                                    <p style="color:#bfdbfe;margin:5px 0 0;font-size:14px;">Workplace Safety Monitoring</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding:40px;">
+                                    <h2 style="margin-top:0;font-size:20px;color:#1e293b;">Login Verification</h2>
+                                    <p style="font-size:16px;line-height:1.5;color:#475569;">Hello <strong>{role.capitalize()}</strong>,</p>
+                                    <p style="font-size:16px;line-height:1.5;color:#475569;">You recently attempted to log in to the Vanguard AI dashboard. Please use the verification code below to complete your sign-in process.</p>
+                                    
+                                    <div style="background-color:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;padding:24px;text-align:center;margin:30px 0;">
+                                        <div style="font-size:36px;font-weight:700;color:#0f172a;letter-spacing:4px;">{otp_code}</div>
+                                    </div>
+                                    
+                                    <p style="font-size:14px;color:#64748b;"><em>This code will expire in {OTP_EXPIRY // 60} minutes.</em></p>
+                                    <p style="font-size:14px;line-height:1.5;color:#64748b;margin-top:24px;border-top:1px solid #e2e8f0;padding-top:24px;">If you did not request this code, your account might be compromised. Please contact your system administrator immediately.</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="background-color:#f1f5f9;padding:20px;text-align:center;font-size:12px;color:#94a3b8;">
+                                    &copy; {datetime.datetime.now().year} Vanguard AI Safety Systems. All rights reserved.
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        """
+        
+        part1 = MIMEText(text, 'plain')
+        part2 = MIMEText(html, 'html')
+        msg.attach(part1)
+        msg.attach(part2)
 
         server = smtplib.SMTP(EMAIL_CONFIG["smtp_server"], EMAIL_CONFIG["smtp_port"])
         server.starttls()
@@ -131,25 +167,27 @@ def cleanup_expired_otps():
     for k in expired_keys:
         del otp_store[k]
 
-def send_sos_email(by="Admin"):
+def send_sos_email(by="Admin", emergency_type="General Emergency"):
     if EMAIL_CONFIG["simulate"]:
         print(f"\n[SIMULATION] Email sent to {EMAIL_CONFIG['recipient_email']}")
         print(f"Subject: 🚨 EMERGENCY SOS ALERT - Workplace Safety")
-        print(f"Message: An SOS alert has been triggered by {by}. Please check the Vanguard AI Dashboard immediately.\n")
+        print(f"Message: An SOS alert ({emergency_type}) has been triggered by {by}. Please check the Vanguard AI Dashboard immediately.\n")
         return True
 
     try:
-        msg = MIMEMultipart()
+        msg = MIMEMultipart('alternative')
         msg['From'] = EMAIL_CONFIG["sender_email"]
         msg['To'] = EMAIL_CONFIG["recipient_email"]
-        msg['Subject'] = "🚨 EMERGENCY SOS ALERT - Vanguard AI Safety"
+        msg['Subject'] = f"🚨 EMERGENCY SOS ALERT: {emergency_type} - Vanguard AI Safety"
 
-        body = f"""
+        # Plain text fallback
+        text = f"""
         ⚠️ EMERGENCY SOS ALERT ⚠️
         
         This is an automated notification from the Vanguard AI Workplace Safety Monitoring System.
         
         An EMERGENCY SOS alert has just been triggered by: {by}
+        Emergency Type: {emergency_type}
         Date: {datetime.datetime.now().strftime('%Y-%m-%d')}
         Time: {datetime.datetime.now().strftime('%H:%M:%S')}
         
@@ -158,7 +196,66 @@ def send_sos_email(by="Admin"):
         Stay Safe,
         Vanguard AI System
         """
-        msg.attach(MIMEText(body, 'plain'))
+        
+        # Professional HTML version
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <body style="margin:0;padding:0;font-family: Arial, sans-serif;background-color:#fef2f2;color:#333;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#fef2f2;padding: 40px 20px;">
+                <tr>
+                    <td align="center">
+                        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 4px 10px rgba(239,68,68,0.2);border: 2px solid #ef4444;">
+                            <tr>
+                                <td style="background-color:#dc2626;padding:30px;text-align:center;">
+                                    <h1 style="color:#ffffff;margin:0;font-size:24px;font-weight:900;letter-spacing:2px;">🚨 EMERGENCY SOS ALERT 🚨</h1>
+                                    <p style="color:#fecaca;margin:5px 0 0;font-size:14px;">Vanguard AI Workplace Safety Monitoring</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding:40px;">
+                                    <h2 style="margin-top:0;font-size:20px;color:#991b1b;">Immediate Action Required</h2>
+                                    <p style="font-size:16px;line-height:1.5;color:#475569;">An EMERGENCY SOS alert has just been triggered on the site. Please review the situation immediately.</p>
+                                    
+                                    <table width="100%" cellpadding="15" cellspacing="0" style="background-color:#fef2f2;border:1px solid #fca5a5;border-radius:8px;margin:30px 0;">
+                                        <tr>
+                                            <td style="font-size:14px;color:#7f1d1d;font-weight:bold;width:40%;">Triggered By:</td>
+                                            <td style="font-size:16px;color:#991b1b;font-weight:900;">{by}</td>
+                                        </tr>
+                                        <tr>
+                                            <td style="font-size:14px;color:#7f1d1d;font-weight:bold;border-top:1px solid #fecaca;">Emergency Type:</td>
+                                            <td style="font-size:16px;color:#ef4444;font-weight:bold;border-top:1px solid #fecaca;">{emergency_type}</td>
+                                        </tr>
+                                        <tr>
+                                            <td style="font-size:14px;color:#7f1d1d;font-weight:bold;border-top:1px solid #fecaca;">Date:</td>
+                                            <td style="font-size:14px;color:#991b1b;border-top:1px solid #fecaca;">{datetime.datetime.now().strftime('%Y-%m-%d')}</td>
+                                        </tr>
+                                        <tr>
+                                            <td style="font-size:14px;color:#7f1d1d;font-weight:bold;border-top:1px solid #fecaca;">Time:</td>
+                                            <td style="font-size:14px;color:#991b1b;border-top:1px solid #fecaca;">{datetime.datetime.now().strftime('%H:%M:%S')}</td>
+                                        </tr>
+                                    </table>
+                                    
+                                    <p style="font-size:14px;line-height:1.5;color:#475569;">Please log in to the Vanguard AI Supervisor Dashboard immediately to view live camera feeds, locate the incident, and dispatch assistance if necessary.</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="background-color:#fee2e2;padding:20px;text-align:center;font-size:12px;color:#991b1b;font-weight:bold;">
+                                    This is an automated critical safety alert. Do not reply to this email.
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        """
+        
+        part1 = MIMEText(text, 'plain')
+        part2 = MIMEText(html, 'html')
+        msg.attach(part1)
+        msg.attach(part2)
 
         server = smtplib.SMTP(EMAIL_CONFIG["smtp_server"], EMAIL_CONFIG["smtp_port"])
         server.starttls()
@@ -169,6 +266,108 @@ def send_sos_email(by="Admin"):
         return True
     except Exception as e:
         print(f"EMAIL ERROR: Failed to send SOS alert email: {e}")
+        return False
+
+def send_resolution_email(emergency_type, alert_date, alert_time):
+    if EMAIL_CONFIG["simulate"]:
+        print(f"\n[SIMULATION] Email sent to {ADMIN_EMAIL}")
+        print(f"Subject: ✅ EMERGENCY RESOLVED - {emergency_type}")
+        print(f"Message: The emergency reported on {alert_date} at {alert_time} has been resolved by the Supervisor.\n")
+        return True
+
+    try:
+        msg = MIMEMultipart('alternative')
+        msg['From'] = EMAIL_CONFIG["sender_email"]
+        msg['To'] = ADMIN_EMAIL
+        msg['Subject'] = f"✅ EMERGENCY RESOLVED: {emergency_type} - Vanguard AI Safety"
+
+        # Plain text fallback
+        text = f"""
+        ✅ EMERGENCY RESOLVED ✅
+        
+        This is an automated notification from the Vanguard AI Workplace Safety Monitoring System.
+        
+        The following emergency has been marked as RESOLVED by the Supervisor:
+        Emergency Type: {emergency_type}
+        Original Alert Date: {alert_date}
+        Original Alert Time: {alert_time}
+        Resolution Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        
+        The situation is now under control.
+        
+        Stay Safe,
+        Vanguard AI System
+        """
+        
+        # Professional HTML version (Green Theme)
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <body style="margin:0;padding:0;font-family: Arial, sans-serif;background-color:#f0fdf4;color:#333;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0fdf4;padding: 40px 20px;">
+                <tr>
+                    <td align="center">
+                        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 4px 10px rgba(34,197,94,0.2);border: 2px solid #22c55e;">
+                            <tr>
+                                <td style="background-color:#16a34a;padding:30px;text-align:center;">
+                                    <h1 style="color:#ffffff;margin:0;font-size:24px;font-weight:900;letter-spacing:2px;">✅ EMERGENCY RESOLVED ✅</h1>
+                                    <p style="color:#bbf7d0;margin:5px 0 0;font-size:14px;">Vanguard AI Workplace Safety Monitoring</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding:40px;">
+                                    <h2 style="margin-top:0;font-size:20px;color:#166534;">Situation Under Control</h2>
+                                    <p style="font-size:16px;line-height:1.5;color:#475569;">A supervisor has successfully resolved the reported emergency and secured the site.</p>
+                                    
+                                    <table width="100%" cellpadding="15" cellspacing="0" style="background-color:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;margin:30px 0;">
+                                        <tr>
+                                            <td style="font-size:14px;color:#14532d;font-weight:bold;width:40%;">Emergency Type:</td>
+                                            <td style="font-size:16px;color:#16a34a;font-weight:900;">{emergency_type}</td>
+                                        </tr>
+                                        <tr>
+                                            <td style="font-size:14px;color:#14532d;font-weight:bold;border-top:1px solid #bbf7d0;">Original Date:</td>
+                                            <td style="font-size:14px;color:#166534;border-top:1px solid #bbf7d0;">{alert_date}</td>
+                                        </tr>
+                                        <tr>
+                                            <td style="font-size:14px;color:#14532d;font-weight:bold;border-top:1px solid #bbf7d0;">Original Time:</td>
+                                            <td style="font-size:14px;color:#166534;border-top:1px solid #bbf7d0;">{alert_time}</td>
+                                        </tr>
+                                        <tr>
+                                            <td style="font-size:14px;color:#14532d;font-weight:bold;border-top:1px solid #bbf7d0;">Resolved At:</td>
+                                            <td style="font-size:14px;color:#166534;border-top:1px solid #bbf7d0;">{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</td>
+                                        </tr>
+                                    </table>
+                                    
+                                    <p style="font-size:14px;line-height:1.5;color:#475569;">No further action is required. All systems have returned to normal operation.</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="background-color:#dcfce7;padding:20px;text-align:center;font-size:12px;color:#166534;font-weight:bold;">
+                                    This is an automated safety resolution update.
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        """
+        
+        part1 = MIMEText(text, 'plain')
+        part2 = MIMEText(html, 'html')
+        msg.attach(part1)
+        msg.attach(part2)
+
+        server = smtplib.SMTP(EMAIL_CONFIG["smtp_server"], EMAIL_CONFIG["smtp_port"])
+        server.starttls()
+        server.login(EMAIL_CONFIG["sender_email"], EMAIL_CONFIG["sender_password"])
+        server.send_message(msg)
+        server.quit()
+        print(f"SUCCESS: Resolution email sent to {ADMIN_EMAIL}")
+        return True
+    except Exception as e:
+        print(f"EMAIL ERROR: Failed to send resolution email: {e}")
         return False
 
 # Global stats
@@ -189,20 +388,35 @@ daily_person_scores = {}
 worker_cache = {} # Map emp_id -> {name, photo}
 id_map = {} # Map track_id -> {match_data, timestamp} (identity fusion with expiry)
 matcher = IdentityMatcher()
+is_enrolling = False # Flag to prevent multiple enrollment threads
 
 def refresh_worker_cache():
-    global worker_cache
-    if workers_collection is not None:
+    global worker_cache, is_enrolling
+    if workers_collection is not None and not is_enrolling:
         try:
             workers = list(workers_collection.find())
             new_cache = {str(w['_id']): w for w in workers}
+            
             # Check if cache changed or matcher is empty
             if len(new_cache) != len(worker_cache) or not matcher.known_faces:
-                print(f"DEBUG: Worker Directory updated. Refreshing AI encodings...")
-                matcher.enroll_workers(new_cache)
+                def background_enrollment():
+                    global is_enrolling
+                    try:
+                        is_enrolling = True
+                        print(f"DEBUG: Worker Directory updated. Refreshing AI encodings in background...")
+                        matcher.enroll_workers(new_cache)
+                    finally:
+                        is_enrolling = False
+                
+                # Start enrollment in a separate thread to prevent camera freeze
+                thread = threading.Thread(target=background_enrollment)
+                thread.daemon = True
+                thread.start()
+                
             worker_cache = new_cache
         except Exception as e:
             print(f"DEBUG: Cache refresh error: {e}")
+            is_enrolling = False
             pass
 
 # Initialize Monitor with default args
@@ -447,23 +661,81 @@ def get_analytics():
         return jsonify({"success": False, "message": "MongoDB is not connected."})
 
     try:
-        pipeline = [
-            {"$sort": {"timestamp": -1}}, 
-            {"$limit": 5000},
-            {"$group": {
-                "_id": {
+        # Get time range from query params
+        time_range = request.args.get('range', 'today')
+        req_month = request.args.get('month') # 1-12
+        req_year = request.args.get('year')   # 2024, etc.
+        
+        now = datetime.datetime.now(datetime.timezone.utc)
+        
+        # Define start time and grouping based on range
+        if req_month and req_year:
+            # View specific month
+            try:
+                m = int(req_month)
+                y = int(req_year)
+                start_time = datetime.datetime(y, m, 1, tzinfo=datetime.timezone.utc)
+                # End of month
+                if m == 12:
+                    end_time = datetime.datetime(y + 1, 1, 1, tzinfo=datetime.timezone.utc)
+                else:
+                    end_time = datetime.datetime(y, m + 1, 1, tzinfo=datetime.timezone.utc)
+                
+                group_by = {
                     "year": {"$year": "$timestamp"},
                     "month": {"$month": "$timestamp"},
-                    "day": {"$dayOfMonth": "$timestamp"},
-                    "hour": {"$hour": "$timestamp"}
-                },
+                    "day": {"$dayOfMonth": "$timestamp"}
+                }
+                match_filter = {"timestamp": {"$gte": start_time, "$lt": end_time}}
+                limit_docs = 50000
+            except:
+                # Fallback to last 30 days if params invalid
+                start_time = now - datetime.timedelta(days=30)
+                match_filter = {"timestamp": {"$gte": start_time}}
+                group_by = {"year": {"$year": "$timestamp"}, "month": {"$month": "$timestamp"}, "week": {"$week": "$timestamp"}}
+                limit_docs = 20000
+        elif time_range == 'week':
+            start_time = now - datetime.timedelta(days=7)
+            match_filter = {"timestamp": {"$gte": start_time}}
+            group_by = {
+                "year": {"$year": "$timestamp"},
+                "month": {"$month": "$timestamp"},
+                "day": {"$dayOfMonth": "$timestamp"}
+            }
+            limit_docs = 10000
+        elif time_range == 'month':
+            start_time = now - datetime.timedelta(days=30)
+            match_filter = {"timestamp": {"$gte": start_time}}
+            group_by = {
+                "year": {"$year": "$timestamp"},
+                "month": {"$month": "$timestamp"},
+                "week": {"$week": "$timestamp"}
+            }
+            limit_docs = 20000
+        else: # Default to 'today' (last 24 hours)
+            start_time = now - datetime.timedelta(hours=24)
+            match_filter = {"timestamp": {"$gte": start_time}}
+            group_by = {
+                "year": {"$year": "$timestamp"},
+                "month": {"$month": "$timestamp"},
+                "day": {"$dayOfMonth": "$timestamp"},
+                "hour": {"$hour": "$timestamp"}
+            }
+            limit_docs = 5000
+
+        pipeline = [
+            {"$match": match_filter},
+            {"$sort": {"timestamp": -1}}, 
+            {"$limit": limit_docs},
+            {"$group": {
+                "_id": group_by,
                 "avg_compliance": {"$avg": "$compliance_rate"},
                 "total_helmet_violations": {"$sum": "$helmet_violations"},
                 "total_vest_violations": {"$sum": "$vest_violations"},
-                "max_detections": {"$max": "$total_detections"}
+                "max_detections": {"$max": "$total_detections"},
+                "latest_timestamp": {"$max": "$timestamp"}
             }},
-            {"$sort": {"_id.year": 1, "_id.month": 1, "_id.day": 1, "_id.hour": 1}},
-            {"$limit": 24}
+            {"$sort": {"latest_timestamp": 1}}
         ]
         
         hourly_analytics = list(logs_collection.aggregate(pipeline))
@@ -479,9 +751,11 @@ def get_analytics():
         return jsonify({
             "success": True,
             "hourly_analytics": hourly_analytics,
-            "recent_violations": recent_events
+            "recent_violations": recent_events,
+            "range": time_range
         })
     except Exception as e:
+        print(f"ANALYTICS ERROR: {e}")
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/settings', methods=['GET', 'POST'])
@@ -553,8 +827,13 @@ def login():
     
     admin_usr = os.getenv("ADMIN_USERNAME", "admin")
     admin_pwd = os.getenv("ADMIN_PASSWORD", "admin")
+    admin2_usr = os.getenv("ADMIN2_USERNAME", "admin2")
+    admin2_pwd = os.getenv("ADMIN2_PASSWORD", "admin2")
+    
     sup_usr = os.getenv("SUPERVISOR_USERNAME", "supervisor")
     sup_pwd = os.getenv("SUPERVISOR_PASSWORD", "supervisor")
+    sup2_usr = os.getenv("SUPERVISOR2_USERNAME", "supervisor2")
+    sup2_pwd = os.getenv("SUPERVISOR2_PASSWORD", "supervisor2")
     
     # Step 1: Validate credentials
     authenticated_role = None
@@ -563,9 +842,15 @@ def login():
     if username == admin_usr and password == admin_pwd and role == 'admin':
         authenticated_role = 'admin'
         target_email = ADMIN_EMAIL
+    elif username == admin2_usr and password == admin2_pwd and role == 'admin':
+        authenticated_role = 'admin'
+        target_email = os.getenv("ADMIN2_EMAIL", "pimprikarsarthak@gmail.com")
     elif username == sup_usr and password == sup_pwd and role == 'supervisor':
         authenticated_role = 'supervisor'
         target_email = SUPERVISOR_EMAIL
+    elif username == sup2_usr and password == sup2_pwd and role == 'supervisor':
+        authenticated_role = 'supervisor'
+        target_email = os.getenv("SUPERVISOR2_EMAIL", "pimprikarsarthak@gmail.com")
     
     if not authenticated_role:
         return jsonify({"success": False, "message": "Invalid credentials or wrong role selected"}), 401
@@ -762,8 +1047,10 @@ def handle_alerts():
     elif request.method == 'POST':
         data = request.json
         now = datetime.datetime.now()
+        emergency_type = data.get("type", "General Emergency")
         new_item = {
             "by": data.get("by", "Admin"),
+            "type": emergency_type,
             "date": now.strftime("%Y-%m-%d"),
             "time": now.strftime("%H:%M:%S"),
             "status": "Alerted",
@@ -776,7 +1063,7 @@ def handle_alerts():
         socketio.emit('new_alert', new_item)
         
         # 2. Trigger Email Notification (Background)
-        threading.Thread(target=send_sos_email, args=(new_item['by'],)).start()
+        threading.Thread(target=send_sos_email, args=(new_item['by'], emergency_type)).start()
         
         return jsonify({"success": True, "item": new_item})
 
@@ -786,10 +1073,23 @@ def update_alert(item_id):
         return jsonify({"success": False, "message": "MongoDB not connected."}), 500
     try:
         data = request.json
+        status = data.get("status", "Resolved")
+        
+        # Fetch the original alert to get details for the email
+        alert = alerts_collection.find_one({"_id": ObjectId(item_id)})
+        
         alerts_collection.update_one(
             {"_id": ObjectId(item_id)}, 
-            {"$set": {"status": data.get("status", "Resolved")}}
+            {"$set": {"status": status}}
         )
+        
+        # Trigger Resolution Email to Admin
+        if status == "Resolved" and alert:
+            emergency_type = alert.get("type", "General Emergency")
+            alert_date = alert.get("date", "Unknown")
+            alert_time = alert.get("time", "Unknown")
+            threading.Thread(target=send_resolution_email, args=(emergency_type, alert_date, alert_time)).start()
+            
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 400

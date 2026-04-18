@@ -6,7 +6,7 @@ import {
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
   Legend, ResponsiveContainer, BarChart, Bar,
-  PieChart, Pie, Cell
+  PieChart, Pie, Cell, AreaChart, Area
 } from 'recharts';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -421,6 +421,10 @@ function Login({ onLogin }) {
 
 function Dashboard({ userRole, onLogout, playBeep }) {
   const [activeTab, setActiveTab] = useState('Overview');
+  const [timeRange, setTimeRange] = useState('month');
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [showSOSModal, setShowSOSModal] = useState(false);
   
   // Real-time polling states
   const [liveStats, setLiveStats] = useState({
@@ -438,9 +442,18 @@ function Dashboard({ userRole, onLogout, playBeep }) {
   useEffect(() => {
     const fetchAll = async () => {
       try {
+        const queryParams = new URLSearchParams({
+          _t: Date.now(),
+          range: timeRange
+        });
+        if (timeRange === 'month') {
+          queryParams.append('month', selectedMonth);
+          queryParams.append('year', selectedYear);
+        }
+
         const [statsRes, analyticsRes, dailyRes] = await Promise.all([
           fetch(`${MOCK_API}/stats?_t=${Date.now()}`).catch(() => null),
-          fetch(`${MOCK_API}/analytics?_t=${Date.now()}`).catch(() => null),
+          fetch(`${MOCK_API}/analytics?${queryParams.toString()}`).catch(() => null),
           fetch(`${MOCK_API}/daily_scores?_t=${Date.now()}`).catch(() => null)
         ]);
         
@@ -476,17 +489,18 @@ function Dashboard({ userRole, onLogout, playBeep }) {
     fetchAll();
     const inv = setInterval(fetchAll, 2000);
     return () => clearInterval(inv);
-  }, [lastViolationCount, playBeep]);
+  }, [lastViolationCount, playBeep, timeRange, selectedMonth, selectedYear]);
 
-  const handleSOS = async () => {
+  const handleSOS = async (emergencyType) => {
+    setShowSOSModal(false);
     playBeep(3000, 440, 0.4, true);
     try {
       await fetch('http://localhost:5000/api/alerts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ by: 'Admin' })
+        body: JSON.stringify({ by: 'Admin', type: emergencyType })
       });
-      alert("SOS ALARM ACTIVE: Security Personnel Notified.");
+      alert(`SOS ALARM ACTIVE: Security Personnel Notified (${emergencyType}).`);
     } catch (error) {
       console.error("Alert failed", error);
     }
@@ -540,6 +554,49 @@ function Dashboard({ userRole, onLogout, playBeep }) {
 
   return (
     <div className="app-container animate-fade-in">
+      {showSOSModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
+          backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', 
+          justifyContent: 'center', alignItems: 'center', zIndex: 9999
+        }}>
+          <div style={{
+            background: '#fff', padding: '32px', borderRadius: '12px', 
+            width: '400px', textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)'
+          }}>
+            <AlertTriangle size={48} color="#ef4444" style={{ marginBottom: '16px' }} />
+            <h2 style={{ margin: '0 0 8px 0', color: '#1e293b' }}>Select Emergency Type</h2>
+            <p style={{ color: '#64748b', marginBottom: '24px', fontSize: '14px' }}>Please specify the nature of the emergency to notify supervisors appropriately.</p>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {['Fire/Explosion', 'Medical Emergency', 'Structural Collapse', 'Equipment Failure', 'Other'].map(type => (
+                <button 
+                  key={type}
+                  onClick={() => handleSOS(type)}
+                  style={{
+                    padding: '12px', background: '#fef2f2', border: '1px solid #fecaca',
+                    borderRadius: '8px', color: '#991b1b', fontWeight: 600,
+                    cursor: 'pointer', transition: 'all 0.2s', width: '100%'
+                  }}
+                  onMouseOver={(e) => { e.currentTarget.style.background = '#fee2e2'; e.currentTarget.style.borderColor = '#f87171'; }}
+                  onMouseOut={(e) => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.borderColor = '#fecaca'; }}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+            <button 
+              onClick={() => setShowSOSModal(false)}
+              style={{
+                marginTop: '24px', background: 'transparent', border: 'none', 
+                color: '#64748b', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline'
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
       <div className="sidebar">
         <div className="sidebar-header">
           <ShieldCheck color="var(--primary)" size={28} />
@@ -561,7 +618,7 @@ function Dashboard({ userRole, onLogout, playBeep }) {
         
         <div style={{ padding: '0 12px' }}>
           {userRole === 'admin' && (
-            <button onClick={handleSOS} style={{ 
+            <button onClick={() => setShowSOSModal(true)} style={{ 
                 width: '100%', background: 'var(--danger)', color: '#fff', marginBottom: '12px',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', 
                 padding: '12px', boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)'
@@ -602,9 +659,33 @@ function Dashboard({ userRole, onLogout, playBeep }) {
         </div>
 
         <div className="dashboard-container" style={{ overflowY: 'auto', height: 'calc(100vh - 80px)'}}>
-          {activeTab === 'Overview' && <OverviewTab liveStats={liveStats} analytics={analytics} isAIPaused={isAIPaused} onToggleAI={toggleAI} onCapture={handleCapture} />}
+          {activeTab === 'Overview' && (
+            <OverviewTab 
+              liveStats={liveStats} 
+              analytics={analytics} 
+              isAIPaused={isAIPaused} 
+              onToggleAI={toggleAI} 
+              onCapture={handleCapture} 
+              timeRange={timeRange} 
+              setTimeRange={setTimeRange}
+              selectedMonth={selectedMonth}
+              setSelectedMonth={setSelectedMonth}
+              selectedYear={selectedYear}
+              setSelectedYear={setSelectedYear}
+            />
+          )}
           {activeTab === 'Incident Feed' && <IncidentFeedTab analytics={analytics} manualIncidents={manualIncidents} />}
-          {activeTab === 'Safety Analytics' && <AnalyticsTab analytics={analytics} />}
+          {activeTab === 'Safety Analytics' && (
+            <AnalyticsTab 
+              analytics={analytics} 
+              timeRange={timeRange} 
+              setTimeRange={setTimeRange}
+              selectedMonth={selectedMonth}
+              setSelectedMonth={setSelectedMonth}
+              selectedYear={selectedYear}
+              setSelectedYear={setSelectedYear}
+            />
+          )}
           {activeTab === 'Safety Score' && <SafetyScoreTab dailyScores={dailyScores} />}
           {activeTab === 'Inventory' && <InventoryTab />}
           {activeTab === 'AI Settings' && <SettingsTab />}
@@ -621,13 +702,22 @@ function Dashboard({ userRole, onLogout, playBeep }) {
 // ------------------------------------
 // OVERVIEW TAB: Live View & Feed
 // ------------------------------------
-function OverviewTab({ liveStats, analytics, isAIPaused, onToggleAI, onCapture }) {
+function OverviewTab({ 
+  liveStats, analytics, isAIPaused, onToggleAI, onCapture, 
+  timeRange, setTimeRange, 
+  selectedMonth, setSelectedMonth, 
+  selectedYear, setSelectedYear 
+}) {
   // Use DB aggregation for dynamic totals since live totals represent instantaneous frame presence.
   const aggregatedProcessed = Math.max(...(analytics.hourly_analytics.map(h => h.max_detections)), liveStats.total_detections);
   const totalHelmetLoss = analytics.hourly_analytics.reduce((sum, item) => sum + item.total_helmet_violations, liveStats.helmet_violations);
   const totalVestLoss = analytics.hourly_analytics.reduce((sum, item) => sum + item.total_vest_violations, liveStats.vest_violations);
-  const historicalComp = analytics.hourly_analytics.reduce((sum, item) => sum + item.avg_compliance, 0) / Math.max(1, analytics.hourly_analytics.length);
-  const displayComp = Math.round((liveStats.compliance_rate + historicalComp) / 2) || 100;
+  const hasHistoricalData = analytics.hourly_analytics && analytics.hourly_analytics.length > 0;
+  const historicalComp = hasHistoricalData 
+    ? analytics.hourly_analytics.reduce((sum, item) => sum + item.avg_compliance, 0) / analytics.hourly_analytics.length
+    : liveStats.compliance_rate;
+
+  const displayComp = Math.round((liveStats.compliance_rate + historicalComp) / 2);
 
   const compColor = displayComp >= 80 ? 'var(--success)' : displayComp >= 50 ? 'var(--warning)' : 'var(--danger)';
   const circumference = 2 * Math.PI * 54;
@@ -652,7 +742,7 @@ function OverviewTab({ liveStats, analytics, isAIPaused, onToggleAI, onCapture }
   return (
     <>
       {/* Compliance Hero Card */}
-      <div className="glass-panel" style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '32px', padding: '28px 36px' }}>
+      <div className="glass-panel" style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '32px', padding: '28px 36px', position: 'relative' }}>
         <div style={{ position: 'relative', width: '130px', height: '130px', flexShrink: 0 }}>
           <svg width="130" height="130" viewBox="0 0 130 130">
             <circle cx="65" cy="65" r="54" fill="none" stroke="#f1f5f9" strokeWidth="10" />
@@ -668,7 +758,7 @@ function OverviewTab({ liveStats, analytics, isAIPaused, onToggleAI, onCapture }
         </div>
         <div style={{ flex: 1 }}>
           <h2 style={{ fontSize: '22px', fontWeight: 700, marginBottom: '8px' }}>
-            Safety Compliance Today
+            Safety Compliance {timeRange === 'today' ? 'Today' : timeRange === 'week' ? 'This Week' : 'This Month'}
           </h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '16px', lineHeight: 1.5 }}>
             {displayComp >= 80
@@ -682,6 +772,59 @@ function OverviewTab({ liveStats, analytics, isAIPaused, onToggleAI, onCapture }
             <span style={{ color: 'var(--text-muted)' }}>Helmet Issues: <strong style={{ color: 'var(--warning)' }}>{totalHelmetLoss}</strong></span>
             <span style={{ color: 'var(--text-muted)' }}>Vest Issues: <strong style={{ color: 'var(--danger)' }}>{totalVestLoss}</strong></span>
           </div>
+        </div>
+
+        {/* Time Range Selector */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end', alignSelf: 'flex-start', marginLeft: 'auto' }}>
+          <div style={{ 
+            background: 'var(--muted-bg)', padding: '4px', borderRadius: '10px', 
+            display: 'flex', border: '1px solid var(--border-color)'
+          }}>
+            {['month', 'week', 'today'].map((range) => (
+              <div 
+                key={range}
+                onClick={() => setTimeRange(range)}
+                style={{ 
+                  padding: '6px 12px', borderRadius: '7px', fontSize: '12px', fontWeight: 600,
+                  cursor: 'pointer', transition: 'all 0.2s',
+                  background: timeRange === range ? 'var(--panel-hover)' : 'transparent',
+                  color: timeRange === range ? 'var(--primary)' : 'var(--text-muted)',
+                  boxShadow: timeRange === range ? '0 2px 4px rgba(0,0,0,0.2)' : 'none'
+                }}
+              >
+                {range.charAt(0).toUpperCase() + range.slice(1)}
+              </div>
+            ))}
+          </div>
+
+          {timeRange === 'month' && (
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <select 
+                value={selectedMonth} 
+                onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                style={{ 
+                  padding: '4px 8px', borderRadius: '6px', fontSize: '11px', color: 'var(--text-main)',
+                  border: '1px solid var(--border-color)', background: 'var(--muted-bg)', outline: 'none'
+                }}
+              >
+                {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((m, i) => (
+                  <option key={i} value={i + 1}>{m}</option>
+                ))}
+              </select>
+              <select 
+                value={selectedYear} 
+                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                style={{ 
+                  padding: '4px 8px', borderRadius: '6px', fontSize: '11px', color: 'var(--text-main)',
+                  border: '1px solid var(--border-color)', background: 'var(--muted-bg)', outline: 'none'
+                }}
+              >
+                {[2024, 2025, 2026].map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
@@ -729,9 +872,9 @@ function OverviewTab({ liveStats, analytics, isAIPaused, onToggleAI, onCapture }
                 onClick={onCapture}
                 disabled={isAIPaused}
                 style={{
-                  background: '#f1f5f9',
+                  background: 'var(--panel-hover)',
                   color: 'var(--text-main)',
-                  border: '1px solid #e2e8f0',
+                  border: '1px solid var(--border-color)',
                   padding: '8px 16px',
                   borderRadius: '8px',
                   fontSize: '12px',
@@ -882,18 +1025,18 @@ function IncidentFeedTab({ analytics, manualIncidents = [] }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
           {allIncidents.map((incident, idx) => (
             <div key={idx} className="incident-card" style={{ 
-              background: 'rgba(255,255,255,0.03)', 
+              background: 'var(--panel-hover)', 
               borderRadius: '12px', 
               overflow: 'hidden',
-              border: '1px solid #f1f5f9',
-              transition: 'transform 0.2s hover'
+              border: '1px solid var(--border-color)',
+              transition: 'transform 0.2s'
             }}>
-              <div style={{ position: 'relative', paddingTop: '56.25%' }}>
+              <div style={{ position: 'relative', paddingTop: '75%' }}>
                 {incident.snapshot ? (
                   <img 
                     src={`data:image/jpeg;base64,${incident.snapshot}`} 
                     alt="Incident Feed" 
-                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#000' }}
                   />
                 ) : (
                   <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: '#222', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -916,13 +1059,13 @@ function IncidentFeedTab({ analytics, manualIncidents = [] }) {
                   </div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                  <div style={{ background: '#f8fafc', padding: '8px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.03)' }}>
+                  <div style={{ background: 'var(--muted-bg)', padding: '8px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                     <p style={{ margin: 0, fontSize: '10px', color: 'var(--text-muted)' }}>COM-RATE</p>
                     <p style={{ margin: 0, fontSize: '14px', fontWeight: 800, color: 'var(--success)' }}>{incident.compliance_rate}%</p>
                   </div>
-                  <div style={{ background: '#f8fafc', padding: '8px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.03)' }}>
+                  <div style={{ background: 'var(--muted-bg)', padding: '8px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                     <p style={{ margin: 0, fontSize: '10px', color: 'var(--text-muted)' }}>DETECTIONS</p>
-                    <p style={{ margin: 0, fontSize: '14px', fontWeight: 800 }}>{incident.total_detections}</p>
+                    <p style={{ margin: 0, fontSize: '14px', fontWeight: 800, color: 'var(--text-main)' }}>{incident.total_detections}</p>
                   </div>
                 </div>
               </div>
@@ -938,7 +1081,12 @@ function IncidentFeedTab({ analytics, manualIncidents = [] }) {
 // ------------------------------------
 // ANALYTICS TAB: Charts & PDF
 // ------------------------------------
-function AnalyticsTab({ analytics }) {
+function AnalyticsTab({ 
+  analytics,
+  timeRange, setTimeRange,
+  selectedMonth, setSelectedMonth,
+  selectedYear, setSelectedYear 
+}) {
   const chartRef = useRef(null);
   
   const generatePDF = async () => {
@@ -956,60 +1104,227 @@ function AnalyticsTab({ analytics }) {
     pdf.save("Safety_Compliance_Report.pdf");
   };
 
-  const chartData = analytics.hourly_analytics.map(h => ({
-    time: `${h._id.hour}:00`,
-    Compliance: Math.round(h.avg_compliance),
-    Helmets_Missed: h.total_helmet_violations,
-    Vests_Missed: h.total_vest_violations
-  })).reverse(); // Charting oldest -> newest from pipeline output
+  const chartData = (analytics.hourly_analytics || []).map(h => {
+    const date = h.latest_timestamp ? new Date(h.latest_timestamp) : new Date();
+    let label = "";
+    if (h._id.hour !== undefined) {
+      label = `${h._id.hour}:00`;
+    } else if (h._id.day !== undefined) {
+      label = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    } else if (h._id.week !== undefined) {
+      label = `Wk ${h._id.week}, ${date.toLocaleDateString(undefined, { month: 'short' })}`;
+    } else {
+      label = date.toLocaleDateString();
+    }
+    
+    return {
+      time: label,
+      Compliance: Math.round(h.avg_compliance),
+      Helmets_Missed: h.total_helmet_violations,
+      Vests_Missed: h.total_vest_violations,
+      Peak_Persons: h.max_detections || 0
+    };
+  });
 
   return (
-    <div className="glass-panel" style={{ minHeight: '80%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <h2 style={{ margin: 0 }}>Historical Analytics</h2>
-        <button onClick={generatePDF} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Download size={18} /> Export PDF
-        </button>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }} ref={chartRef}>
+      <div className="glass-panel">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ margin: 0 }}>Safety Performance Analytics</h2>
+          <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+            {/* Time Range Selector */}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <div style={{ 
+                background: 'var(--muted-bg)', padding: '4px', borderRadius: '10px', 
+                display: 'flex', border: '1px solid var(--border-color)'
+              }}>
+                {['month', 'week', 'today'].map((range) => (
+                  <div 
+                    key={range}
+                    onClick={() => setTimeRange(range)}
+                    style={{ 
+                      padding: '6px 12px', borderRadius: '7px', fontSize: '12px', fontWeight: 600,
+                      cursor: 'pointer', transition: 'all 0.2s',
+                      background: timeRange === range ? 'var(--panel-hover)' : 'transparent',
+                      color: timeRange === range ? 'var(--primary)' : 'var(--text-muted)',
+                      boxShadow: timeRange === range ? '0 2px 4px rgba(0,0,0,0.2)' : 'none'
+                    }}
+                  >
+                    {range.charAt(0).toUpperCase() + range.slice(1)}
+                  </div>
+                ))}
+              </div>
 
-      <div ref={chartRef} style={{ padding: '20px', borderRadius: '12px' }}>
-        {chartData.length === 0 ? (
-          <div style={{ textAlign: 'center', color: 'var(--text-muted)', margin: '40px 0'}}>
-             Not enough data yet. System is generating analytics...
-          </div>
-        ) : (
-          <>
-            <h3 style={{ marginBottom: '16px' }}>Hourly Compliance Trend (%)</h3>
-            <div style={{ width: '100%', height: '300px', marginBottom: '40px' }}>
-              <ResponsiveContainer>
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="time" stroke="var(--text-muted)" />
-                  <YAxis stroke="var(--text-muted)" domain={[0, 100]} />
-                  <RechartsTooltip contentStyle={{ backgroundColor: 'var(--surface)', border: 'none', borderRadius: '8px' }} />
-                  <Legend />
-                  <Line type="monotone" dataKey="Compliance" stroke="var(--success)" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 8 }} />
-                </LineChart>
-              </ResponsiveContainer>
+              {timeRange === 'month' && (
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <select 
+                    value={selectedMonth} 
+                    onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                    style={{ 
+                      padding: '4px 8px', borderRadius: '6px', fontSize: '11px', color: 'var(--text-main)',
+                      border: '1px solid var(--border-color)', background: 'var(--muted-bg)', outline: 'none'
+                    }}
+                  >
+                    {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((m, i) => (
+                      <option key={i} value={i + 1}>{m}</option>
+                    ))}
+                  </select>
+                  <select 
+                    value={selectedYear} 
+                    onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                    style={{ 
+                      padding: '4px 8px', borderRadius: '6px', fontSize: '11px', color: 'var(--text-main)',
+                      border: '1px solid var(--border-color)', background: 'var(--muted-bg)', outline: 'none'
+                    }}
+                  >
+                    {[2024, 2025, 2026].map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
-            <h3 style={{ marginBottom: '16px' }}>Total Issues Detection Over Time</h3>
+            <button onClick={generatePDF} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Download size={18} /> Export PDF
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div>
+          {chartData.length === 0 ? (
+            <div style={{ textAlign: 'center', color: 'var(--text-muted)', margin: '40px 0'}}>
+              Not enough data yet. System is generating analytics...
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
+              <div className="glass-panel">
+                <h3 style={{ marginBottom: '16px', fontSize: '1rem' }}>Compliance Trend (%)</h3>
+                <div style={{ width: '100%', height: '320px' }}>
+                  <ResponsiveContainer>
+                    <LineChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--divider)" vertical={false} />
+                      <XAxis dataKey="time" stroke="var(--text-muted)" fontSize={11} tickLine={false} axisLine={false} />
+                      <YAxis stroke="var(--text-muted)" fontSize={11} tickLine={false} axisLine={false} domain={[0, 100]} />
+                      <RechartsTooltip 
+                        contentStyle={{ backgroundColor: 'var(--sidebar-bg)', borderColor: 'var(--border-color)', borderRadius: '12px', border: '1px solid var(--border-color)' }}
+                        itemStyle={{ color: 'var(--text-main)', fontSize: '12px' }}
+                        labelStyle={{ color: 'var(--text-muted)', marginBottom: '4px', fontSize: '11px', fontWeight: 600 }}
+                      />
+                      <Legend />
+                      <Line type="monotone" dataKey="Compliance" stroke="var(--primary)" strokeWidth={4} dot={{ r: 4, fill: 'var(--primary)', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 8 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              
+              <div className="glass-panel">
+                <h3 style={{ marginBottom: '16px', textAlign: 'center', fontSize: '1rem' }}>Issues Breakdown</h3>
+                <div style={{ width: '100%', height: '320px' }}>
+                  <ResponsiveContainer>
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: 'Helmet Issues', value: chartData.reduce((a, b) => a + b.Helmets_Missed, 0) },
+                          { name: 'Vest Issues', value: chartData.reduce((a, b) => a + b.Vests_Missed, 0) }
+                        ]}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={70}
+                        outerRadius={100}
+                        paddingAngle={8}
+                        dataKey="value"
+                      >
+                        <Cell fill="var(--warning)" />
+                        <Cell fill="var(--danger)" />
+                      </Pie>
+                      <RechartsTooltip 
+                        contentStyle={{ backgroundColor: 'var(--sidebar-bg)', borderColor: 'var(--border-color)', borderRadius: '12px', border: '1px solid var(--border-color)' }}
+                        itemStyle={{ color: 'var(--text-main)', fontSize: '12px' }}
+                      />
+                      <Legend verticalAlign="bottom" />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          )}
+      </div>
+
+      {chartData.length > 0 && (
+        <>
+          <div className="glass-panel">
+            <h3 style={{ marginBottom: '24px', fontSize: '1rem' }}>Incident Volume Over Time</h3>
             <div style={{ width: '100%', height: '300px' }}>
               <ResponsiveContainer>
                 <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="time" stroke="var(--text-muted)" />
-                  <YAxis stroke="var(--text-muted)" />
-                  <RechartsTooltip contentStyle={{ backgroundColor: 'var(--surface)', border: 'none', borderRadius: '8px' }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--divider)" vertical={false} />
+                  <XAxis dataKey="time" stroke="var(--text-muted)" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis stroke="var(--text-muted)" fontSize={11} tickLine={false} axisLine={false} />
+                  <RechartsTooltip 
+                    cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                    contentStyle={{ backgroundColor: 'var(--sidebar-bg)', borderColor: 'var(--border-color)', borderRadius: '12px', border: '1px solid var(--border-color)' }}
+                    itemStyle={{ color: 'var(--text-main)', fontSize: '12px' }}
+                    labelStyle={{ color: 'var(--text-muted)', marginBottom: '4px', fontSize: '11px', fontWeight: 600 }}
+                  />
                   <Legend />
-                  <Bar dataKey="Helmets_Missed" fill="var(--warning)" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Vests_Missed" fill="var(--danger)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Helmets_Missed" name="Helmet Violations" fill="var(--warning)" radius={[6, 6, 0, 0]} barSize={40} />
+                  <Bar dataKey="Vests_Missed" name="Vest Violations" fill="var(--danger)" radius={[6, 6, 0, 0]} barSize={40} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </>
-        )}
-      </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginTop: '24px' }}>
+            <div className="glass-panel">
+              <h3 style={{ marginBottom: '24px', fontSize: '1rem' }}>Workforce Activity Trend</h3>
+              <div style={{ width: '100%', height: '300px' }}>
+                <ResponsiveContainer>
+                  <AreaChart data={chartData}>
+                    <defs>
+                      <linearGradient id="colorPersons" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="var(--primary)" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--divider)" vertical={false} />
+                    <XAxis dataKey="time" stroke="var(--text-muted)" fontSize={11} tickLine={false} axisLine={false} />
+                    <YAxis stroke="var(--text-muted)" fontSize={11} tickLine={false} axisLine={false} />
+                    <RechartsTooltip 
+                      contentStyle={{ backgroundColor: 'var(--sidebar-bg)', borderColor: 'var(--border-color)', borderRadius: '12px', border: '1px solid var(--border-color)' }}
+                      itemStyle={{ color: 'var(--text-main)', fontSize: '12px' }}
+                      labelStyle={{ color: 'var(--text-muted)', marginBottom: '4px', fontSize: '11px', fontWeight: 600 }}
+                    />
+                    <Legend />
+                    <Area type="monotone" dataKey="Peak_Persons" name="Personnel Count" stroke="var(--primary)" fillOpacity={1} fill="url(#colorPersons)" strokeWidth={3} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="glass-panel">
+              <h3 style={{ marginBottom: '24px', fontSize: '1rem' }}>Safety Issue Intensity</h3>
+              <div style={{ width: '100%', height: '300px' }}>
+                <ResponsiveContainer>
+                  <BarChart data={chartData} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--divider)" horizontal={false} />
+                    <XAxis type="number" stroke="var(--text-muted)" fontSize={11} tickLine={false} axisLine={false} />
+                    <YAxis dataKey="time" type="category" stroke="var(--text-muted)" fontSize={11} tickLine={false} axisLine={false} />
+                    <RechartsTooltip 
+                      cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                      contentStyle={{ backgroundColor: 'var(--sidebar-bg)', borderColor: 'var(--border-color)', borderRadius: '12px', border: '1px solid var(--border-color)' }}
+                      itemStyle={{ color: 'var(--text-main)', fontSize: '12px' }}
+                    />
+                    <Legend />
+                    <Bar dataKey="Helmets_Missed" name="Helmet Risk" stackId="a" fill="var(--warning)" radius={[0, 0, 0, 0]} barSize={20} />
+                    <Bar dataKey="Vests_Missed" name="Vest Risk" stackId="a" fill="var(--danger)" radius={[0, 4, 4, 0]} barSize={20} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1131,7 +1446,7 @@ function SafetyScoreTab({ dailyScores }) {
           <div style={{ flex: 1 }}>
             <h2 style={{ fontSize: '22px', fontWeight: 700, marginBottom: '8px' }}>
               <Zap size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--primary)' }} />
-              Daily Safety Score (Top 50)
+              Daily Safety Score
             </h2>
             <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '12px' }}>
               {persons.length === 0 
@@ -1167,7 +1482,7 @@ function SafetyScoreTab({ dailyScores }) {
       {/* Daily Person Table */}
       <div className="glass-panel">
         <h3 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Users size={18} color="var(--primary)" /> Daily Worker List (Max 50)
+          <Users size={18} color="var(--primary)" /> Daily Worker List
         </h3>
         {persons.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>
@@ -1340,7 +1655,7 @@ function InventoryTab() {
         {/* Charts Row */}
         {!loading && items.length > 0 && (
           <div style={{ display: 'flex', gap: '24px', marginBottom: '24px' }}>
-            <div style={{ flex: 1, background: '#f8fafc', padding: '16px', borderRadius: '12px', textAlign: 'center' }}>
+            <div style={{ flex: 1, background: 'var(--muted-bg)', border: '1px solid var(--border-color)', padding: '16px', borderRadius: '12px', textAlign: 'center' }}>
               <h3 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--text-muted)' }}>Helmets Status</h3>
               <div style={{ height: '140px' }}>
                 <ResponsiveContainer>
@@ -1358,7 +1673,7 @@ function InventoryTab() {
               </div>
             </div>
             
-            <div style={{ flex: 1, background: '#f8fafc', padding: '16px', borderRadius: '12px', textAlign: 'center' }}>
+            <div style={{ flex: 1, background: 'var(--muted-bg)', border: '1px solid var(--border-color)', padding: '16px', borderRadius: '12px', textAlign: 'center' }}>
               <h3 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--text-muted)' }}>Vests Status</h3>
               <div style={{ height: '140px' }}>
                 <ResponsiveContainer>
@@ -1384,7 +1699,7 @@ function InventoryTab() {
               placeholder="Search by Equipment Name or Assigned Person..." 
               value={searchTerm} 
               onChange={e => setSearchTerm(e.target.value)} 
-              style={{ width: '100%', padding: '10px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', color: 'var(--text-main)', outline: 'none' }} 
+              style={{ width: '100%', padding: '10px', borderRadius: '8px', background: 'var(--muted-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', outline: 'none' }} 
            />
         </div>
         
@@ -1433,36 +1748,36 @@ function InventoryTab() {
         <h3 style={{ marginBottom: '20px' }}>{editingId ? 'Edit Equipment' : 'Add Equipment'}</h3>
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div className="form-group">
-             <label>Equipment ID / Name</label>
-             <input type="text" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} style={{ width: '100%' }} />
+             <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: 'var(--text-muted)' }}>Equipment ID / Name</label>
+             <input type="text" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} style={{ width: '100%', padding: '10px', background: 'var(--muted-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '8px', outline: 'none' }} />
           </div>
           <div className="form-group">
-             <label>Type</label>
-             <select value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})} style={{ width: '100%', padding: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', color: 'var(--text-main)', borderRadius: '8px', outline: 'none' }}>
-                <option>Helmet</option>
-                <option>Safety Vest</option>
-                <option>Boots</option>
-                <option>Gloves</option>
+             <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: 'var(--text-muted)' }}>Type</label>
+             <select value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})} style={{ width: '100%', padding: '10px', background: 'var(--muted-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '8px', outline: 'none' }}>
+                <option value="Helmet">Helmet</option>
+                <option value="Safety Vest">Safety Vest</option>
+                <option value="Boots">Boots</option>
+                <option value="Gloves">Gloves</option>
              </select>
           </div>
           <div className="form-group">
-             <label>Status</label>
-             <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} style={{ width: '100%', padding: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', color: 'var(--text-main)', borderRadius: '8px', outline: 'none' }}>
-                <option>Available</option>
-                <option>In Use</option>
-                <option>Lost/Damaged</option>
-                <option>Maintenance</option>
+             <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: 'var(--text-muted)' }}>Status</label>
+             <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} style={{ width: '100%', padding: '10px', background: 'var(--muted-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '8px', outline: 'none' }}>
+                <option value="Available">Available</option>
+                <option value="In Use">In Use</option>
+                <option value="Lost/Damaged">Lost/Damaged</option>
+                <option value="Maintenance">Maintenance</option>
              </select>
           </div>
           <div className="form-group">
-             <label>Assigned To (Name/ID)</label>
-             <input type="text" value={formData.assigned_to} onChange={e => setFormData({...formData, assigned_to: e.target.value})} placeholder="Optional..." style={{ width: '100%' }} />
+             <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: 'var(--text-muted)' }}>Assigned To (Name/ID)</label>
+             <input type="text" value={formData.assigned_to} onChange={e => setFormData({...formData, assigned_to: e.target.value})} placeholder="Optional..." style={{ width: '100%', padding: '10px', background: 'var(--muted-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '8px', outline: 'none' }} />
           </div>
           <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
             {editingId && (
-              <button type="button" onClick={() => {setEditingId(null); setFormData({name:'', type:'Helmet', status:'Available', assigned_to:''})}} style={{ flex: 1, background: 'var(--surface)', padding: '10px', borderRadius: '8px', border: 'none', color: 'var(--text-main)', cursor: 'pointer' }}>Cancel</button>
+              <button type="button" onClick={() => {setEditingId(null); setFormData({name:'', type:'Helmet', status:'Available', assigned_to:''})}} style={{ flex: 1, background: 'var(--muted-bg)', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', color: 'var(--text-main)', cursor: 'pointer' }}>Cancel</button>
             )}
-            <button type="submit" style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: 'var(--primary)', color: '#fff', padding: '10px', borderRadius: '8px', border: 'none', color: 'var(--text-main)', cursor: 'pointer', fontWeight: 600 }}>
+            <button type="submit" style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: 'var(--primary)', color: '#fff', padding: '10px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
               {editingId ? 'Update' : <><Plus size={16} /> Add Item</>}
             </button>
           </div>
@@ -1586,7 +1901,7 @@ function WorkerDirectoryTab() {
               placeholder="Search workers..." 
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              style={{ padding: '10px 10px 10px 40px', background: '#f1f5f9', border: '1px solid #e2e8f0', color: 'var(--text-main)', borderRadius: '20px', width: '250px', outline: 'none' }}
+              style={{ padding: '10px 10px 10px 40px', background: 'var(--muted-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '20px', width: '250px', outline: 'none' }}
             />
           </div>
         </div>
@@ -1613,7 +1928,7 @@ function WorkerDirectoryTab() {
                 {filteredWorkers.map(w => (
                   <tr key={w._id}>
                     <td>
-                      <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: '#f1f5f9', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #e2e8f0' }}>
+                      <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'var(--muted-bg)', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-color)' }}>
                         {w.photo ? <img src={w.photo} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Users size={18} color="#94a3b8" />}
                       </div>
                     </td>
@@ -1642,39 +1957,39 @@ function WorkerDirectoryTab() {
           <div className="form-group" style={{ textAlign: 'center', marginBottom: '8px' }}>
             <div 
               onClick={() => fileInputRef.current.click()}
-              style={{ width: '100px', height: '100px', borderRadius: '50%', background: '#f1f5f9', margin: '0 auto 12px', cursor: 'pointer', overflow: 'hidden', border: '2px dashed #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s' }}
+              style={{ width: '100px', height: '100px', borderRadius: '50%', background: 'var(--muted-bg)', margin: '0 auto 12px', cursor: 'pointer', overflow: 'hidden', border: '2px dashed var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s' }}
             >
               {formData.photo ? <img src={formData.photo} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Camera size={32} color="#94a3b8" />}
             </div>
             <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" style={{ display: 'none' }} />
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{formData.photo ? 'Click to change photo' : 'Upload Profile Photo'}</span>
           </div>
-          <div className="form-group">
-             <label>Employee ID</label>
-             <input type="text" value={formData.emp_id} onChange={e => setFormData({...formData, emp_id: e.target.value})} placeholder="Auto-generated if empty" style={{ width: '100%' }} />
-          </div>
-          <div className="form-group">
-             <label>Full Name</label>
-             <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. John Doe" required style={{ width: '100%' }} />
-          </div>
-          <div className="form-group">
-             <label>Department</label>
-             <select value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} style={{ width: '100%', padding: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', color: 'var(--text-main)', borderRadius: '8px' }}>
-                <option>General</option>
-                <option>Construction</option>
-                <option>Maintenance</option>
-                <option>Safety</option>
-                <option>Admin</option>
-             </select>
-          </div>
-          <div className="form-group">
-             <label>Position</label>
-             <input type="text" value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} placeholder="e.g. Supervisor" style={{ width: '100%' }} />
-          </div>
-          <div className="form-group">
-             <label>Contact (Email/Phone)</label>
-             <input type="text" value={formData.contact} onChange={e => setFormData({...formData, contact: e.target.value})} placeholder="e.g. @company.com" style={{ width: '100%' }} />
-          </div>
+           <div className="form-group">
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: 'var(--text-muted)' }}>Employee ID</label>
+              <input type="text" value={formData.emp_id} onChange={e => setFormData({...formData, emp_id: e.target.value})} placeholder="Auto-generated if empty" style={{ width: '100%', padding: '10px', background: 'var(--muted-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '8px', outline: 'none' }} />
+           </div>
+           <div className="form-group">
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: 'var(--text-muted)' }}>Full Name</label>
+              <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. John Doe" required style={{ width: '100%', padding: '10px', background: 'var(--muted-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '8px', outline: 'none' }} />
+           </div>
+           <div className="form-group">
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: 'var(--text-muted)' }}>Department</label>
+              <select value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} style={{ width: '100%', padding: '10px', background: 'var(--muted-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '8px', outline: 'none' }}>
+                 <option value="General">General</option>
+                 <option value="Construction">Construction</option>
+                 <option value="Maintenance">Maintenance</option>
+                 <option value="Safety">Safety</option>
+                 <option value="Admin">Admin</option>
+              </select>
+           </div>
+           <div className="form-group">
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: 'var(--text-muted)' }}>Position</label>
+              <input type="text" value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} placeholder="e.g. Supervisor" style={{ width: '100%', padding: '10px', background: 'var(--muted-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '8px', outline: 'none' }} />
+           </div>
+           <div className="form-group">
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: 'var(--text-muted)' }}>Contact (Email/Phone)</label>
+              <input type="text" value={formData.contact} onChange={e => setFormData({...formData, contact: e.target.value})} placeholder="e.g. @company.com" style={{ width: '100%', padding: '10px', background: 'var(--muted-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '8px', outline: 'none' }} />
+           </div>
           <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
             {editingId && (
               <button type="button" onClick={() => {setEditingId(null); setFormData({emp_id:'', name:'', department:'General', position:'Worker', contact:'', photo:''}); if(fileInputRef.current) fileInputRef.current.value=''}} style={{ flex: 1, background: 'var(--surface)', padding: '10px', borderRadius: '8px', border: 'none', color: 'var(--text-main)', cursor: 'pointer' }}>Cancel</button>
@@ -1923,6 +2238,7 @@ function AlertListTab() {
               <tr>
                 <th>Sr No.</th>
                 <th>Alert By</th>
+                <th>Type</th>
                 <th>Date</th>
                 <th>Time</th>
                 <th>Status</th>
@@ -1940,6 +2256,7 @@ function AlertListTab() {
                       <ShieldCheck size={16} color="var(--primary)" /> {alert.by}
                     </span>
                   </td>
+                  <td style={{ fontWeight: 600, color: 'var(--danger)' }}>{alert.type || 'General Emergency'}</td>
                   <td>{alert.date}</td>
                   <td style={{ fontWeight: 500 }}>{alert.time}</td>
                   <td>
