@@ -484,6 +484,11 @@ def camera_worker():
     
     while True:
         try:
+            # Refresh worker cache periodically even if AI is inactive
+            # to ensure workers are enrolled and ready before detection starts
+            if int(time.time()) % 30 == 0:
+                refresh_worker_cache()
+
             success, frame = cap.read()
             if not success:
                 print("Warning: Camera read failed, retrying...")
@@ -616,6 +621,9 @@ def camera_worker():
             time.sleep(1)
 
 # Start background camera processor thread that updates 24/7
+# Call refresh once immediately so enrollment starts during server boot
+refresh_worker_cache()
+
 worker_thread = threading.Thread(target=camera_worker, daemon=True)
 worker_thread.start()
 

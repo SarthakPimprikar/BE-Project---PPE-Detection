@@ -16,6 +16,11 @@ const MOCK_API = "http://localhost:5000/api";
 
 function App() {
   const [userRole, setUserRole] = useState(null);
+  const [view, setView] = useState('landing'); // 'landing', 'login', 'dashboard'
+
+  useEffect(() => {
+    if (userRole) setView('dashboard');
+  }, [userRole]);
 
   const playBeep = (durationMs, frequency = 440, volume = 0.1, isSiren = false) => {
     try {
@@ -49,12 +54,260 @@ function App() {
     }
   };
 
-  if (!userRole) return <Login onLogin={(role) => setUserRole(role)} />;
+  if (view === 'landing') return <LandingPage onLaunch={() => setView('login')} />;
+  if (!userRole) return <Login onLogin={(role) => setUserRole(role)} onBack={() => setView('landing')} />;
 
-  return <Dashboard userRole={userRole} onLogout={() => setUserRole(null)} playBeep={playBeep} />;
+  return <Dashboard userRole={userRole} onLogout={() => { setUserRole(null); setView('landing'); }} playBeep={playBeep} />;
 }
 
-function Login({ onLogin }) {
+function LandingPage({ onLaunch }) {
+  return (
+    <div className="landing-page" style={{ background: 'var(--bg-color)', color: 'var(--text-main)', minHeight: '100vh', fontFamily: 'var(--font-family)' }}>
+      {/* Navbar */}
+      <nav style={{ 
+        height: '80px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
+        padding: '0 5%', borderBottom: '1px solid var(--border-color)', position: 'sticky', top: 0, 
+        background: 'rgba(11, 15, 20, 0.8)', backdropFilter: 'blur(10px)', zIndex: 1000 
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontWeight: 800, fontSize: '1.5rem', color: 'var(--text-white)' }}>
+          <ShieldCheck color="var(--primary)" size={32} />
+          <span>VANGUARD <span style={{ color: 'var(--primary)' }}>AI</span></span>
+        </div>
+        <div style={{ display: 'flex', gap: '32px', alignItems: 'center' }}>
+          {[
+            { label: 'Safety Modules', id: 'features' },
+            { label: 'AI Architecture', id: 'solutions' },
+            { label: 'Biometric Fusion', id: 'analytics' }
+          ].map(item => (
+            <a key={item.id} href={`#${item.id}`} style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-muted)', transition: 'color 0.2s' }} onMouseOver={e => e.target.style.color = 'var(--primary)'} onMouseOut={e => e.target.style.color = 'var(--text-muted)'}>{item.label}</a>
+          ))}
+          <button 
+            onClick={onLaunch}
+            style={{ padding: '10px 24px', background: 'var(--primary)', color: 'white', borderRadius: '8px', fontWeight: 600, border: 'none', cursor: 'pointer', boxShadow: '0 4px 14px rgba(34, 197, 94, 0.3)' }}
+          >
+            Launch System
+          </button>
+        </div>
+      </nav>
+
+      {/* Hero Section */}
+      <section style={{ padding: '80px 5% 120px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '60px', alignItems: 'center' }}>
+        <div className="animate-fade-in">
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 12px', background: 'rgba(34, 197, 94, 0.1)', borderRadius: '20px', color: 'var(--primary)', fontSize: '0.8rem', fontWeight: 700, marginBottom: '24px', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
+            <Zap size={14} />
+            NEXT-GEN WORKPLACE SAFETY
+          </div>
+          <h1 style={{ fontSize: '4rem', fontWeight: 900, lineHeight: 1.1, marginBottom: '24px', color: 'var(--text-white)' }}>
+            Empower Your Site with <span style={{ color: 'var(--primary)' }}>Autonomous</span> Oversight
+          </h1>
+          <p style={{ fontSize: '1.25rem', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '40px', maxWidth: '540px' }}>
+            Vanguard AI integrates advanced computer vision and real-time biometric analytics to ensure 100% compliance. Protect your workforce with the industry's most advanced PPE monitoring system.
+          </p>
+          <div style={{ display: 'flex', gap: '16px' }}>
+            <button 
+              onClick={onLaunch}
+              style={{ padding: '18px 36px', background: 'var(--primary)', color: 'white', borderRadius: '12px', fontSize: '1.1rem', fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 10px 25px rgba(34, 197, 94, 0.3)', display: 'flex', alignItems: 'center', gap: '10px' }}
+            >
+              Start Monitoring Now <ChevronRight size={20} />
+            </button>
+            <button style={{ padding: '18px 36px', background: 'var(--panel-bg)', color: 'var(--text-main)', borderRadius: '12px', fontSize: '1.1rem', fontWeight: 600, border: '1px solid var(--border-color)', cursor: 'pointer' }}>
+              View Case Studies
+            </button>
+          </div>
+          <div style={{ marginTop: '48px', display: 'flex', alignItems: 'center', gap: '32px' }}>
+            <div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-white)' }}>95.4%</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Detection Accuracy</div>
+            </div>
+            <div style={{ width: '1px', height: '40px', background: 'var(--border-color)' }}></div>
+            <div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-white)' }}>&lt;50ms</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Real-time Latency</div>
+            </div>
+            <div style={{ width: '1px', height: '40px', background: 'var(--border-color)' }}></div>
+            <div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-white)' }}>24/7</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Autonomous Audit</div>
+            </div>
+          </div>
+        </div>
+        <div className="animate-fade-in" style={{ position: 'relative' }}>
+          <div style={{ 
+            position: 'absolute', top: '-20px', left: '-20px', right: '20px', bottom: '20px', 
+            background: 'linear-gradient(135deg, var(--primary), transparent)', opacity: 0.1, borderRadius: '24px', zIndex: -1 
+          }}></div>
+          <img 
+            src="/hero.png" 
+            alt="Vanguard AI Dashboard" 
+            style={{ width: '100%', borderRadius: '24px', boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border-color)' }} 
+          />
+          {/* Floating UI Card */}
+          <div style={{ position: 'absolute', bottom: '40px', left: '-30px', background: 'var(--panel-bg)', padding: '20px', borderRadius: '16px', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-lg)', width: '220px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+              <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(34, 197, 94, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <CheckCircle size={18} color="var(--primary)" />
+              </div>
+              <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Safety Verified</span>
+            </div>
+            <div style={{ height: '4px', background: 'var(--muted-bg)', borderRadius: '2px', width: '100%', overflow: 'hidden' }}>
+              <div style={{ height: '100%', background: 'var(--primary)', width: '85%' }}></div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              <span>Compliance Rate</span>
+              <span style={{ color: 'var(--primary)', fontWeight: 700 }}>85%</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section id="features" style={{ padding: '100px 5%', background: 'var(--sidebar-bg)' }}>
+        <div style={{ textAlign: 'center', marginBottom: '80px' }}>
+          <h2 style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--text-white)', marginBottom: '16px' }}>Industrial-Grade Safety Modules</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', maxWidth: '700px', margin: '0 auto' }}>Deploy comprehensive safety coverage with specialized AI modules designed for high-risk industrial environments.</p>
+        </div>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '32px' }}>
+          {[
+            { icon: Camera, title: 'PPE Detection', desc: 'Real-time monitoring of helmets, vests, and eyewear with advanced YOLO architecture.' },
+            { icon: Users, title: 'Biometric Access', desc: 'Integrated facial recognition to link safety performance with individual worker identities.' },
+            { icon: Activity, title: 'Health & Intensity', desc: 'Monitor site activity levels and worker fatigue through behavioral pattern analysis.' },
+            { icon: FileText, title: 'Automated Audits', desc: 'Generate professional compliance reports and safety scores with zero manual input.' },
+            { icon: Bell, title: 'Instant Alerts', desc: 'Multi-channel notifications for PPE violations and unauthorized area access.' },
+            { icon: LayoutDashboard, title: 'Command Center', desc: 'A unified dashboard for multi-site monitoring and enterprise safety analytics.' }
+          ].map((feature, i) => (
+            <div key={i} className="glass-panel" style={{ padding: '40px', transition: 'transform 0.3s' }} onMouseOver={e => e.currentTarget.style.transform = 'translateY(-10px)'} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
+              <div style={{ width: '56px', height: '56px', borderRadius: '12px', background: 'rgba(34, 197, 94, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px', color: 'var(--primary)' }}>
+                <feature.icon size={28} />
+              </div>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-white)', marginBottom: '12px' }}>{feature.title}</h3>
+              <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>{feature.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Anatomical Safety Architecture Section */}
+      <section id="solutions" style={{ padding: '100px 5%' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '80px', alignItems: 'center' }}>
+          <div>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 12px', background: 'rgba(34, 197, 94, 0.1)', borderRadius: '20px', color: 'var(--primary)', fontSize: '0.8rem', fontWeight: 700, marginBottom: '24px' }}>
+              <Aperture size={14} /> PRECISION GATING
+            </div>
+            <h2 style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--text-white)', marginBottom: '24px' }}>Anatomical Safety <br/><span style={{ color: 'var(--primary)' }}>Architecture</span></h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem', lineHeight: 1.6, marginBottom: '32px' }}>
+              Standard AI often fails due to background noise. Vanguard AI solves this through <strong>Regional Gating</strong>—a unique spatial algorithm that maps PPE detections to specific anatomical zones of the human body.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+              {[
+                { title: 'Head Gating', desc: 'Top 26% box ratio for helmet verification.' },
+                { title: 'Torso Gating', desc: 'Middle 52% box ratio for safety vest mapping.' },
+                { title: 'IoU Thresholding', desc: 'Strict spatial overlap gates for high precision.' },
+                { title: 'Aspect Ratio Guard', desc: 'Filters skinny/wide boxes to eliminate clutter.' }
+              ].map((gate, i) => (
+                <div key={i} style={{ padding: '20px', background: 'var(--panel-bg)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
+                  <h4 style={{ color: 'var(--text-white)', fontWeight: 700, fontSize: '0.9rem', marginBottom: '8px' }}>{gate.title}</h4>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{gate.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          <div className="glass-panel" style={{ padding: '40px', position: 'relative', overflow: 'hidden', display: 'flex', justifyContent: 'center' }}>
+             {/* Body Scan Visualization */}
+             <div style={{ position: 'relative', width: '240px', height: '400px', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '20px', background: 'rgba(255,255,255,0.02)' }}>
+                {/* Head Gate */}
+                <div style={{ position: 'absolute', top: '0', left: '10%', right: '10%', height: '26%', border: '2px solid var(--primary)', borderRadius: '8px', background: 'rgba(34, 197, 94, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                   <div style={{ fontSize: '0.6rem', color: 'var(--primary)', fontWeight: 900 }}>HEAD ZONE [26%]</div>
+                </div>
+                {/* Torso Gate */}
+                <div style={{ position: 'absolute', top: '26%', left: '5%', right: '5%', height: '52%', border: '2px solid #3b82f6', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                   <div style={{ fontSize: '0.6rem', color: '#3b82f6', fontWeight: 900 }}>TORSO ZONE [52%]</div>
+                </div>
+                {/* Legs (Inactive) */}
+                <div style={{ position: 'absolute', top: '78%', left: '15%', right: '15%', height: '22%', border: '1px dashed var(--text-muted)', borderRadius: '8px', opacity: 0.3 }}></div>
+                
+                {/* Connection Lines */}
+                <div style={{ position: 'absolute', right: '-40px', top: '13%', width: '40px', height: '1px', background: 'var(--border-color)' }}></div>
+                <div style={{ position: 'absolute', right: '-120px', top: '13%', color: 'var(--primary)', fontSize: '0.7rem', fontWeight: 700 }}>HELMET VERIFIED</div>
+                
+                <div style={{ position: 'absolute', right: '-40px', top: '52%', width: '40px', height: '1px', background: 'var(--border-color)' }}></div>
+                <div style={{ position: 'absolute', right: '-120px', top: '52%', color: '#3b82f6', fontSize: '0.7rem', fontWeight: 700 }}>VEST VERIFIED</div>
+             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Biometric Identity Fusion Section */}
+      <section id="analytics" style={{ padding: '100px 5%', background: 'var(--sidebar-bg)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '80px', alignItems: 'center' }}>
+          <div className="glass-panel" style={{ padding: '40px', borderRadius: '32px', position: 'relative', overflow: 'hidden' }}>
+            {/* Identity Match Mockup */}
+            <div style={{ position: 'relative', borderRadius: '20px', background: '#000', height: '320px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+              <div style={{ position: 'absolute', inset: 0, opacity: 0.3, background: 'radial-gradient(circle at center, var(--primary) 0%, transparent 70%)' }}></div>
+              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '120px', height: '120px', border: '2px solid var(--primary)', borderRadius: '12px' }}>
+                <div style={{ position: 'absolute', top: '-10px', left: '-10px', width: '20px', height: '20px', borderTop: '4px solid var(--primary)', borderLeft: '4px solid var(--primary)' }}></div>
+                <div style={{ position: 'absolute', bottom: '-10px', right: '-10px', width: '20px', height: '20px', borderBottom: '4px solid var(--primary)', borderRight: '4px solid var(--primary)' }}></div>
+              </div>
+              <div style={{ position: 'absolute', bottom: '40px', left: '0', right: '0', textAlign: 'center' }}>
+                <div style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '1.2rem', letterSpacing: '2px' }}>SCANNING IDENTITY...</div>
+              </div>
+            </div>
+            
+            <div style={{ position: 'absolute', top: '60px', right: '60px', background: 'var(--panel-bg)', padding: '16px', borderRadius: '16px', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-lg)', width: '180px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <CheckCircle size={16} color="var(--primary)" />
+                <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>Match Found</span>
+              </div>
+              <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-white)' }}>John Doe</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>ID: #EMP-9921</div>
+            </div>
+          </div>
+
+          <div>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 12px', background: 'rgba(34, 197, 94, 0.1)', borderRadius: '20px', color: 'var(--primary)', fontSize: '0.8rem', fontWeight: 700, marginBottom: '24px' }}>
+              <Users size={14} /> BIOMETRIC FUSION
+            </div>
+            <h2 style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--text-white)', marginBottom: '24px' }}>Identity-Linked <br/><span style={{ color: 'var(--primary)' }}>Safety Intelligence</span></h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem', lineHeight: 1.6, marginBottom: '32px' }}>
+              Unlike generic monitoring systems, Vanguard AI merges object detection with facial biometrics. 
+              We don't just detect a violation; we identify the individual responsible, allowing for personalized safety coaching and accountability.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {[
+                { title: 'Zero-Touch Enrolment', desc: 'Auto-syncs with your HR worker directory photos.' },
+                { title: 'Privacy-First Matching', desc: 'Local-only 128-bit biometric encoding vectors.' },
+                { title: 'Smart Score History', desc: 'Track safety performance per worker over time.' }
+              ].map((item, i) => (
+                <div key={i} style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(34, 197, 94, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <div style={{ width: '8px', height: '8px', background: 'var(--primary)', borderRadius: '50%' }}></div>
+                  </div>
+                  <div>
+                    <h4 style={{ color: 'var(--text-white)', fontWeight: 700, margin: 0 }}>{item.title}</h4>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '4px 0 0' }}>{item.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+      {/* Footer */}
+      <footer style={{ padding: '60px 5%', borderTop: '1px solid var(--border-color)', textAlign: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', fontWeight: 800, fontSize: '1.2rem', color: 'var(--text-white)', marginBottom: '24px' }}>
+          <ShieldCheck color="var(--primary)" size={24} />
+          <span>VANGUARD AI</span>
+        </div>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>© 2026 Vanguard Safety AI Systems. All rights reserved.</p>
+      </footer>
+    </div>
+  );
+}
+
+function Login({ onLogin, onBack }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('admin');
@@ -195,39 +448,39 @@ function Login({ onLogin }) {
   const formatTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
   const inputStyle = {
-    width: '100%', padding: '14px 16px 14px 48px', background: '#f8fafc',
-    border: '1px solid #e2e8f0', borderRadius: '12px', fontSize: '15px', color: '#1e293b',
+    width: '100%', padding: '14px 16px 14px 48px', background: 'var(--muted-bg)',
+    border: '1px solid var(--border-color)', borderRadius: '12px', fontSize: '15px', color: 'var(--text-main)',
     outline: 'none', transition: 'border-color 0.2s'
   };
 
   const btnStyle = {
-    width: '100%', padding: '16px', background: '#0061f2', color: '#fff',
+    width: '100%', padding: '16px', background: 'var(--primary)', color: '#fff',
     border: 'none', borderRadius: '12px', fontSize: '16px', fontWeight: 700,
     cursor: isLoading ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
-    boxShadow: '0 4px 12px rgba(0, 97, 242, 0.2)', marginTop: '8px'
+    boxShadow: '0 4px 12px rgba(34, 197, 94, 0.2)', marginTop: '8px'
   };
 
   // ---- OTP Verification Screen ----
   if (otpStep) {
     return (
-      <div className="login-container animate-fade-in" style={{ background: '#f8fafc', color: '#1e293b' }}>
+      <div className="login-container animate-fade-in" style={{ background: 'var(--bg-color)', color: 'var(--text-main)' }}>
         <div className="login-box-v2" style={{
-          width: '100%', maxWidth: '440px', padding: '48px', background: '#fff',
-          borderRadius: '24px', boxShadow: '0 20px 50px rgba(0,0,0,0.05)', margin: '20px'
+          width: '100%', maxWidth: '440px', padding: '48px', background: 'var(--panel-bg)',
+          borderRadius: '24px', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-lg)', margin: '20px'
         }}>
           <div style={{ textAlign: 'center', marginBottom: '32px' }}>
             <div style={{
               width: '64px', height: '64px', borderRadius: '50%', margin: '0 auto 16px',
-              background: 'linear-gradient(135deg, #dbeafe, #eff6ff)',
+              background: 'rgba(34, 197, 94, 0.1)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(37, 99, 235, 0.15)'
+              boxShadow: '0 4px 12px rgba(34, 197, 94, 0.15)'
             }}>
-              <Mail size={28} color="#2563eb" />
+              <Mail size={28} color="var(--primary)" />
             </div>
-            <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#00204a', marginBottom: '8px' }}>Verify Your Identity</h1>
-            <p style={{ color: '#64748b', fontSize: '14px', lineHeight: 1.6 }}>
+            <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-white)', marginBottom: '8px' }}>Verify Your Identity</h1>
+            <p style={{ color: 'var(--text-muted)', fontSize: '14px', lineHeight: 1.6 }}>
               We've sent a 6-digit verification code to<br />
-              <strong style={{ color: '#1e293b' }}>{maskedEmail}</strong>
+              <strong style={{ color: 'var(--text-main)' }}>{maskedEmail}</strong>
             </p>
           </div>
 
@@ -295,13 +548,13 @@ function Login({ onLogin }) {
 
           <div style={{ textAlign: 'center', marginTop: '16px' }}>
             <button
-              onClick={() => { setOtpStep(false); setError(''); setOtpDigits(['','','','','','']); }}
+              onClick={() => { setOtpStep(false); setError(''); setOtpDigits(['','','','','','']); onBack(); }}
               style={{
-                background: 'none', border: 'none', color: '#64748b',
+                background: 'none', border: 'none', color: 'var(--text-muted)',
                 fontSize: '13px', cursor: 'pointer', textDecoration: 'underline'
               }}
             >
-              ← Back to Login
+              ← Back to Product Info
             </button>
           </div>
         </div>
@@ -311,28 +564,36 @@ function Login({ onLogin }) {
 
   // ---- Credentials Screen (Step 1) ----
   return (
-    <div className="login-container animate-fade-in" style={{ background: '#f8fafc', color: '#1e293b' }}>
+    <div className="login-container animate-fade-in" style={{ background: 'var(--bg-color)', color: 'var(--text-main)' }}>
       <div className="login-box-v2" style={{ 
-        width: '100%', maxWidth: '440px', padding: '48px', background: '#fff', 
-        borderRadius: '24px', boxShadow: '0 20px 50px rgba(0,0,0,0.05)',
+        width: '100%', maxWidth: '440px', padding: '48px', background: 'var(--panel-bg)', 
+        borderRadius: '24px', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-lg)',
         margin: '20px'
       }}>
+        {/* Back Link */}
+        <button 
+          onClick={onBack}
+          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '13px', cursor: 'pointer', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '4px', padding: 0 }}
+        >
+          <ChevronRight size={14} style={{ transform: 'rotate(180deg)' }} /> Back to Product
+        </button>
         <div style={{ marginBottom: '32px' }}>
-          <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#00204a', marginBottom: '8px' }}>Vanguard AI Safety</h1>
-          <p style={{ color: '#64748b', fontSize: '15px', lineHeight: 1.6 }}>Secure access to real-time workplace compliance and PPE monitoring.</p>
+          <h1 style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-white)', marginBottom: '8px' }}>Vanguard AI Safety</h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: '15px', lineHeight: 1.6 }}>Secure access to real-time workplace compliance and PPE monitoring.</p>
         </div>
 
         {/* Role Selector Segmented Control */}
         <div style={{ 
-          background: '#f1f5f9', padding: '4px', borderRadius: '12px', 
-          display: 'flex', marginBottom: '32px', position: 'relative' 
+          background: 'var(--muted-bg)', padding: '4px', borderRadius: '12px', 
+          display: 'flex', marginBottom: '32px', position: 'relative', border: '1px solid var(--border-color)'
         }}>
           <div 
             onClick={() => setRole('admin')}
             style={{ 
               flex: 1, padding: '12px', textAlign: 'center', fontSize: '14px', fontWeight: 600,
-              cursor: 'pointer', zIndex: 2, color: role === 'admin' ? '#2563eb' : '#64748b',
-              transition: 'all 0.3s'
+              cursor: 'pointer', zIndex: 2, color: role === 'admin' ? 'var(--primary)' : 'var(--text-muted)',
+              transition: 'all 0.3s', borderRadius: '8px',
+              background: 'transparent'
             }}
           >
             Admin
@@ -341,8 +602,9 @@ function Login({ onLogin }) {
             onClick={() => setRole('supervisor')}
             style={{ 
               flex: 1, padding: '12px', textAlign: 'center', fontSize: '14px', fontWeight: 600,
-              cursor: 'pointer', zIndex: 2, color: role === 'supervisor' ? '#2563eb' : '#64748b',
-              transition: 'all 0.3s'
+              cursor: 'pointer', zIndex: 2, color: role === 'supervisor' ? 'var(--primary)' : 'var(--text-muted)',
+              transition: 'all 0.3s', borderRadius: '8px',
+              background: 'transparent'
             }}
           >
             Supervisor
@@ -350,20 +612,20 @@ function Login({ onLogin }) {
           <div style={{ 
             position: 'absolute', top: '4px', bottom: '4px', 
             left: role === 'admin' ? '4px' : 'calc(50% + 2px)',
-            width: 'calc(50% - 6px)', background: '#fff', 
-            borderRadius: '9px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
+            width: 'calc(50% - 6px)', background: 'rgba(34, 197, 94, 0.1)', 
+            borderRadius: '9px', border: '1px solid var(--primary)',
             transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
             zIndex: 1
           }} />
         </div>
 
-        {error && <div style={{ color: '#ef4444', background: '#fef2f2', padding: '12px', borderRadius: '8px', fontSize: '14px', marginBottom: '20px', border: '1px solid #fee2e2' }}>{error}</div>}
+        {error && <div style={{ color: 'var(--danger)', background: 'rgba(239, 68, 68, 0.1)', padding: '12px', borderRadius: '8px', fontSize: '14px', marginBottom: '20px', border: '1px solid rgba(239, 68, 68, 0.2)', textAlign: 'center' }}>{error}</div>}
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div className="form-group-v2">
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '8px', color: '#334155' }}>Employee</label>
+            <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '8px', color: 'var(--text-secondary)' }}>Employee</label>
             <div style={{ position: 'relative' }}>
-              <User size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+              <User size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input 
                 type="text" 
                 placeholder="Enter Employee" 
@@ -371,16 +633,16 @@ function Login({ onLogin }) {
                 onChange={e => setUsername(e.target.value)} 
                 required 
                 style={inputStyle}
-                onFocus={(e) => e.target.style.borderColor = '#2563eb'}
-                onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
+                onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+                onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
               />
             </div>
           </div>
 
           <div className="form-group-v2">
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '8px', color: '#334155' }}>Password</label>
+            <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '8px', color: 'var(--text-secondary)' }}>Password</label>
             <div style={{ position: 'relative' }}>
-              <ShieldCheck size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+              <ShieldCheck size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input 
                 type={showPass ? "text" : "password"} 
                 placeholder="Enter password" 
@@ -388,12 +650,12 @@ function Login({ onLogin }) {
                 onChange={e => setPassword(e.target.value)} 
                 required 
                 style={{ ...inputStyle, padding: '14px 48px 14px 48px' }}
-                onFocus={(e) => e.target.style.borderColor = '#2563eb'}
-                onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
+                onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+                onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
               />
               <div 
                 onClick={() => setShowPass(!showPass)}
-                style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', cursor: 'pointer' }}
+                style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', cursor: 'pointer' }}
               >
                 {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
               </div>
@@ -561,12 +823,12 @@ function Dashboard({ userRole, onLogout, playBeep }) {
           justifyContent: 'center', alignItems: 'center', zIndex: 9999
         }}>
           <div style={{
-            background: '#fff', padding: '32px', borderRadius: '12px', 
-            width: '400px', textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)'
+            background: 'var(--panel-bg)', padding: '32px', borderRadius: '12px', 
+            width: '400px', textAlign: 'center', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-lg)'
           }}>
-            <AlertTriangle size={48} color="#ef4444" style={{ marginBottom: '16px' }} />
-            <h2 style={{ margin: '0 0 8px 0', color: '#1e293b' }}>Select Emergency Type</h2>
-            <p style={{ color: '#64748b', marginBottom: '24px', fontSize: '14px' }}>Please specify the nature of the emergency to notify supervisors appropriately.</p>
+            <AlertTriangle size={48} color="var(--danger)" style={{ marginBottom: '16px' }} />
+            <h2 style={{ margin: '0 0 8px 0', color: 'var(--text-white)' }}>Select Emergency Type</h2>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '24px', fontSize: '14px' }}>Please specify the nature of the emergency to notify supervisors appropriately.</p>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {['Fire/Explosion', 'Medical Emergency', 'Structural Collapse', 'Equipment Failure', 'Other'].map(type => (
@@ -574,12 +836,12 @@ function Dashboard({ userRole, onLogout, playBeep }) {
                   key={type}
                   onClick={() => handleSOS(type)}
                   style={{
-                    padding: '12px', background: '#fef2f2', border: '1px solid #fecaca',
-                    borderRadius: '8px', color: '#991b1b', fontWeight: 600,
+                    padding: '12px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)',
+                    borderRadius: '8px', color: 'var(--danger)', fontWeight: 600,
                     cursor: 'pointer', transition: 'all 0.2s', width: '100%'
                   }}
-                  onMouseOver={(e) => { e.currentTarget.style.background = '#fee2e2'; e.currentTarget.style.borderColor = '#f87171'; }}
-                  onMouseOut={(e) => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.borderColor = '#fecaca'; }}
+                  onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'; e.currentTarget.style.borderColor = 'var(--danger)'; }}
+                  onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.2)'; }}
                 >
                   {type}
                 </button>
@@ -589,7 +851,7 @@ function Dashboard({ userRole, onLogout, playBeep }) {
               onClick={() => setShowSOSModal(false)}
               style={{
                 marginTop: '24px', background: 'transparent', border: 'none', 
-                color: '#64748b', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline'
+                color: 'var(--text-muted)', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline'
               }}
             >
               Cancel

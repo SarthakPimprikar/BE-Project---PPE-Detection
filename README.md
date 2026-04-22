@@ -1,5 +1,9 @@
 # Vanguard AI - Workplace Safety Monitoring System
 
+> [!IMPORTANT]
+> **Comprehensive Project Documentation:** For a detailed breakdown of the tech stack, AI models, algorithms, API endpoints, and system architecture, please refer to [VANGUARD_AI_SYSTEM_DETAILS.md](./VANGUARD_AI_SYSTEM_DETAILS.md).
+
+
 Vanguard AI is a state-of-the-art, real-time workplace safety monitoring system designed to enhance industrial compliance and employee protection. Utilizing advanced YOLO-based object detection and facial recognition, Vanguard AI provides automated oversight of Personal Protective Equipment (PPE) and site activity.
 
 ## 🚀 Key Features
